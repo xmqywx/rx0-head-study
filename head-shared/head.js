@@ -6,7 +6,8 @@
 // in the ear pods and a neck ball joint. update({d, explode, armor, time}) poses all of it from kin.js.
 import * as THREE from 'three';
 import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, shellPlate, sweep} from './geo.js';
-import {CROWN, FACE, FIN, HORN, MASK, pose} from './kin.js';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 
 const V3 = THREE.Vector3;
 
@@ -45,19 +46,6 @@ const PLATES = [
   {k: 'rearLow', ub: [118, 166], ut: [118, 166], y: [-1.1, 0.45], lift: 0.6, up: 0, red: 'lr', off: -0.01},
   {k: 'sideLow', ub: [68, 118], ut: [62, 118], y: [-1.12, -0.6], lift: 0.3, up: 0, red: ''},
 ];
-// the strip region under one edge of a plate
-const edgeStrip = (c, e, hw, w = 0.06) => {
-  const yb = c.yb || [c.y[0], c.y[0]];
-  const yt = c.yt || [c.y[1], c.y[1]];
-  const du = (w / hw) / D2R;
-  if (e === 'b' || e === 't') {
-    const ye = e === 'b' ? yb : yt;
-    return {ub: c.ub, ut: c.ub, yb: [ye[0] - w, ye[1] - w], yt: [ye[0] + w, ye[1] + w]};
-  }
-  const i = e === 'l' ? 0 : 1;
-  return {ub: [c.ub[i] - du, c.ub[i] + du], ut: [c.ut[i] - du, c.ut[i] + du], yb, yt};
-};
-
 function materials() {
   const std = (o) => new THREE.MeshStandardMaterial({roughness: 0.5, metalness: 0, envMapIntensity: 0.6, ...o});
   return {
@@ -68,7 +56,7 @@ function materials() {
     steel: std({color: '#8d959c', roughness: 0.35, metalness: 0.7}),
     visor: std({color: '#1b2128', roughness: 0.16, metalness: 0.5, envMapIntensity: 1}),
     lens: std({color: '#0d1114', roughness: 0.2, metalness: 0.3}),
-    red: std({color: '#3a2a29', emissive: '#ff1d0c', emissiveIntensity: 0, roughness: 0.35}),
+    red: std({color: '#7c1f1a', emissive: '#ff1a0a', emissiveIntensity: 0, roughness: 0.3, metalness: 0.15, envMapIntensity: 0.9}),
     chin: std({color: '#c8262a', roughness: 0.4}),
     green: std({color: '#0f2016', emissive: '#39ff6e', emissiveIntensity: 0, roughness: 0.2}),
     ink: new THREE.LineBasicMaterial({color: '#41474e', transparent: true, opacity: 0.55}),
@@ -120,49 +108,126 @@ export function buildHead() {
   };
 
   // ---------------------------------------------------------------- inner frame skull
+  // Not a smooth egg: courses of graphite blocks bolted round a dark core, every course offset like brickwork, block
+  // heights varied so the surface steps. Merged into one mesh per material.
   const skull = new THREE.Group();
   skull.add(mesh(loftBody(core, [-1.2, -0.85, -0.55, -0.1, 0.3, 0.65, 0.95, 1.2, 1.4, 1.58, 1.72, 1.84, 1.9, 1.97], 24), M.frame, false));
-  // frame blocks bolted to the skull (deterministic layout)
   {
-    let seed = 7;
-    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    for (let i = 0; i < 26; i++) {
-      const u = 40 + rnd() * 130;
-      const y = -0.9 + rnd() * 2.6;
-      const w = 6 + rnd() * 10;
-      const h = 0.12 + rnd() * 0.22;
-      const g = shellPlate(core, {ub: [u, u + w], ut: [u, u + w], y: [y, Math.min(y + h, 1.9)]}, {t: 0.05 + rnd() * 0.04, gap: 0, bevel: 0.015, nu: 1});
-      skull.add(mesh(g.geo, i % 3 ? M.frameMid : M.frame, false));
-      skull.add(mesh(mirrorX(g.geo), i % 3 ? M.frameMid : M.frame, false));
+    const hash = (i, j) => {
+      const x = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    const COURSES = [-1.18, -0.82, -0.46, -0.1, 0.25, 0.6, 0.92, 1.22, 1.48, 1.7, 1.86];
+    const geos = [[], [], []];
+    for (let i = 0; i < COURSES.length - 1; i++) {
+      const y0 = COURSES[i];
+      const y1 = COURSES[i + 1];
+      const step = i > 7 ? 30 : 20;
+      const shift = (i % 2) * step * 0.5;
+      for (let u = -180 + shift; u < 180 + shift - 0.1; u += step) {
+        const h = hash(i, u);
+        const w = step * (h > 0.8 ? 1 : 1);
+        const t = 0.04 + 0.06 * hash(u, i + 9);
+        // some blocks split in two along their height for a busier, machined surface
+        const split = h > 0.6 && y1 - y0 > 0.28;
+        const parts = split ? [[y0, (y0 + y1) / 2], [(y0 + y1) / 2, y1]] : [[y0, y1]];
+        for (const [a0, a1] of parts) {
+          const g = shellPlate(core, {ub: [u, u + w], ut: [u, u + w], y: [a0, a1]}, {t: t * (split ? 1.25 : 1), gap: 0.018, bevel: 0.016, nu: w > 24 ? 2 : 1}).geo;
+          geos[h < 0.45 ? 0 : h < 0.85 ? 1 : 2].push(g);
+        }
+      }
     }
+    const MATS = [M.frame, M.frameMid, M.steel];
+    for (const [k, list] of geos.entries()) if (list.length) skull.add(mesh(mergeGeometries(list), MATS[k], false));
   }
-  // psycho-frame strips: under every seam, on the same surface the plates sit on, just below them
-  const reds = new THREE.Group();
-  for (const c of PLATES)
-    for (const e of c.red) {
-      const yb = c.yb || [c.y[0], c.y[0]];
-      const yt = c.yt || [c.y[1], c.y[1]];
-      const hw = surf.at((yb[0] + yt[1]) / 2)[0];
-      const g = shellPlate(surf, edgeStrip(c, e, hw), {t: 0.05, off: -0.07, gap: 0, bevel: 0.012}).geo;
-      reds.add(mesh(g, M.red, false), mesh(mirrorX(g), M.red, false));
+
+  // ---------------------------------------------------------------- psycho-frame: red parts, not lights
+  // Chunky red segments chained along every armor seam, seated on the skull. In Unicorn Mode their tops sit just
+  // under the plates' undersides, so the seams read dark; in NT-D the plates lift off and the frame rises into the
+  // gaps. Each chain is its own part so the explode can float it between the skull and the armor.
+  const frameParts = [];
+  const chain = (path, {w = 0.072, h = 0.13, base = -0.15, seg = 0.42, gap = 0.04} = {}) => {
+    // densify the (u, y) polyline, measure it in world space, then cut it into segments
+    const pts = [];
+    for (let i = 0; i < path.length - 1; i++)
+      for (let k = 0; k < 12; k++) {
+        const t = k / 12;
+        pts.push([path[i][0] + (path[i + 1][0] - path[i][0]) * t, path[i][1] + (path[i + 1][1] - path[i][1]) * t]);
+      }
+    pts.push(path[path.length - 1]);
+    const W3 = pts.map(([u, y]) => surf.S(u * D2R, y));
+    const N3 = pts.map(([u, y]) => surf.normal(u * D2R, y));
+    const len = [0];
+    for (let i = 1; i < W3.length; i++) len.push(len[i - 1] + W3[i].distanceTo(W3[i - 1]));
+    const L = len[len.length - 1];
+    const at = (s) => {
+      let i = 1;
+      while (i < len.length - 1 && len[i] < s) i++;
+      const t = (s - len[i - 1]) / Math.max(1e-6, len[i] - len[i - 1]);
+      return {p: W3[i - 1].clone().lerp(W3[i], t), n: N3[i - 1].clone().lerp(N3[i], t).normalize()};
+    };
+    const m = new Mesher();
+    const n = Math.max(1, Math.round((L + gap) / (seg + gap)));
+    const sl = (L - gap * (n - 1)) / n;
+    for (let k = 0; k < n; k++) {
+      const s0 = k * (sl + gap);
+      const ss = [s0, s0 + sl * 0.5, s0 + sl];
+      const fr = ss.map(at);
+      const path3 = fr.map((f) => f.p.clone().addScaledVector(f.n, base));
+      const ups = fr.map((f) => f.n);
+      // bevelled bar; every other segment carries a raised knuckle so the chain reads as machined links
+      sweep(m, path3, ups, () => [[-w, 0], [w, 0], [w, h * 0.78], [w * 0.62, h], [-w * 0.62, h], [-w, h * 0.78]]);
+      if (k % 3 === 1 && sl > 0.2) {
+        const c = at(s0 + sl * 0.5);
+        const c2 = at(s0 + sl * 0.5 + 0.07);
+        sweep(m, [c.p.clone().addScaledVector(c.n, base), c2.p.clone().addScaledVector(c2.n, base)], [c.n, c2.n], () => [[-w * 1.45, 0], [w * 1.45, 0], [w * 1.45, h * 1.08], [-w * 1.45, h * 1.08]]);
+      }
     }
-  const stripGeo = (c) => shellPlate(surf, c, {t: 0.05, off: -0.07, gap: 0, bevel: 0.012}).geo;
-  // the back centre seam and the ridge seam
-  reds.add(mesh(stripGeo({ub: [166, 194], ut: [166, 194], y: [1.36, 1.48]}), M.red, false));
-  // the face: frame either side of the faceplate, and a bar under the brow, hidden by the mask in Unicorn Mode
-  reds.add(
-    mesh(
-      geoOf((m) =>
-        prism(m, [[0.38, 0.05], [0.45, 0.05], [0.44, -0.62], [0.29, -1.1], [0.24, -1.07], [0.38, -0.6]], 'z', 0.78, (x, y) => 1.08 + 0.12 * y - 0.25 * x, 0.015, {mirror: true}),
-      ),
-      M.red,
-      false,
-    ),
-    mesh(geoOf((m) => prism(m, [[0.08, 0.16], [0.8, 0.46], [0.86, 0.38], [0.1, 0.08]], 'z', 0.9, (x, y) => 1.24 - 0.3 * x, 0.012, {mirror: true})), M.red, false),
-  );
-  skull.add(reds);
+    const mid = at(L / 2);
+    return {geo: m.geo(), n: mid.n, p: mid.p};
+  };
+  const edgePath = (c, e) => {
+    const yb = c.yb || [c.y[0], c.y[0]];
+    const yt = c.yt || [c.y[1], c.y[1]];
+    if (e === 'b') return [[c.ub[0], yb[0]], [c.ub[1], yb[1]]];
+    if (e === 't') return [[c.ut[0], yt[0]], [c.ut[1], yt[1]]];
+    const i = e === 'l' ? 0 : 1;
+    return [[c.ub[i], yb[i]], [c.ut[i], yt[i]]];
+  };
+  const addChain = (path, opts, mirror = true) => {
+    const {geo, n, p} = chain(path, opts);
+    for (const s of mirror ? [1, -1] : [1]) {
+      const g = new THREE.Group();
+      g.add(mesh(s > 0 ? geo : mirrorX(geo), M.red, false));
+      const nn = n.clone();
+      if (s < 0) nn.x = -nn.x;
+      const part = add(g, nn.clone().multiplyScalar(0.5), (q, obj) => obj.position.addScaledVector(nn, FRAME_RISE * q.frame));
+      frameParts.push(part);
+    }
+  };
+  for (const c of PLATES) for (const e of c.red) addChain(edgePath(c, e), {base: (c.off ?? 0) - 0.21});
+  addChain([[166, 1.42], [194, 1.42]], {base: -0.17}, false);
+  // the face: frame either side of the faceplate, under the brow, and up both sides of the crest
+  {
+    const g = new THREE.Group();
+    const face = (x, y) => 1.08 + 0.12 * y - 0.25 * x;
+    g.add(
+      mesh(geoOf((m) => prism(m, [[0.37, 0.06], [0.47, 0.06], [0.46, -0.6], [0.31, -1.1], [0.23, -1.06], [0.37, -0.6]], 'z', 0.76, face, 0.02, {mirror: true})), M.red, false),
+      mesh(geoOf((m) => prism(m, [[0.08, 0.17], [0.8, 0.47], [0.88, 0.37], [0.1, 0.06]], 'z', 0.88, (x) => 1.25 - 0.3 * x, 0.02, {mirror: true})), M.red, false),
+      mesh(geoOf((m) => prism(m, [[0.19, 0.5], [0.3, 0.58], [0.3, 1.52], [0.19, 1.62]], 'z', 0.95, (x, y) => 1.34 - 0.3 * (y - 0.5), 0.02, {mirror: true})), M.red, false),
+    );
+    for (const [x, y] of [[0.42, -0.25], [0.4, -0.55], [0.34, -0.85]])
+      for (const s of [1, -1]) {
+        const k = mesh(geoOf((m) => prism(m, [[x - 0.07, y + 0.05], [x + 0.07, y + 0.05], [x + 0.07, y - 0.05], [x - 0.07, y - 0.05]], 'z', 0.8, (xx, yy) => face(xx, yy) + 0.035, 0.015)), M.red, false);
+        if (s < 0) k.scale.x = -1;
+        g.add(k);
+      }
+    const part = add(g, new V3(0, 0, 0.55), (q, obj) => obj.position.z += 0.04 * q.frame);
+    frameParts.push(part);
+    anchors.frameFace = {obj: g, p: new V3(0.42, -0.4, 1.0)};
+  }
   add(skull, new V3(0, 0, 0));
-  anchors.frame = {obj: reds, p: new V3(0.92, 1.42, -0.2)};
+  anchors.frame = {obj: frameParts[0].obj, p: surf.S(66 * D2R, 1.72)};
   anchors.skull = {obj: skull, p: new V3(-0.7, 0.4, -1.0)};
 
   // ---------------------------------------------------------------- helmet plates
@@ -241,7 +306,7 @@ export function buildHead() {
     const far = (x, y) => 1.7 - 0.3 * (y - 0.2) - 0.2 * Math.abs(x);
     block.add(
       mesh(
-        geoOf((m) => prism(m, [[-0.12, 0.15], [0.12, 0.15], [0.18, 0.5], [0.17, 1.35], [0.1, 1.62], [-0.1, 1.62], [-0.17, 1.35], [-0.18, 0.5]], 'z', 0.95, far, 0.035)),
+        geoOf((m) => prism(m, [[-0.12, 0.15], [0.12, 0.15], [0.2, 0.5], [0.21, 1.35], [0.15, 1.66], [-0.15, 1.66], [-0.21, 1.35], [-0.2, 0.5]], 'z', 0.95, far, 0.035)),
         M.white,
       ),
     );
@@ -249,7 +314,7 @@ export function buildHead() {
     block.add(mesh(geoOf((m) => prism(m, [[-0.09, 0.72], [0.09, 0.72], [0.09, 1.02], [-0.09, 1.02]], 'z', 1.2, (x, y) => far(x, y) + 0.004, 0.01)), M.lens, false));
     const cam = mesh(geoOf((m) => prism(m, [[-0.055, 0.78], [0.055, 0.78], [0.055, 0.96], [-0.055, 0.96]], 'z', 1.2, (x, y) => far(x, y) + 0.012, 0.012)), M.green, false);
     block.add(cam);
-    add(block, new V3(0, 0.5, 1.4), (p, obj) => obj.position.add(new V3(0, 0.18 * p.crown, 0.03 * p.crown)));
+    add(block, new V3(0, 0.5, 1.4), (p, obj) => obj.position.add(new V3(0, 0.26 * p.crown, 0.03 * p.crown)));
     anchors.camera = {obj: cam, p: new V3(0, 0.87, 1.5)};
   }
 
@@ -260,7 +325,7 @@ export function buildHead() {
     const horn = new THREE.Group();
     horn.position.set(...HORN.root);
     horn.quaternion.setFromUnitVectors(new V3(0, 1, 0), dir);
-    const W = (f) => 0.26 * (1 - f) ** 0.85 + 0.006;
+    const W = (f) => 0.33 * (1 - f) ** 0.5 + 0.006;
     const Dp = (f) => 0.21 * (1 - f) + 0.006;
     const SEG = [0, 0.24, 0.46, 0.64, 0.8, 1];
     const half = (s) => {
@@ -290,7 +355,7 @@ export function buildHead() {
       h.position.set(-s * 0.02, -0.06, 0);
       pv.add(h);
       horn.add(pv);
-      return {pv, s};
+      return {pv, h, s};
     });
     // the hinge: two knuckles and an axle across the horn's root, lit up only by the explode
     const hinge = new THREE.Group();
@@ -309,9 +374,10 @@ export function buildHead() {
     horn.add(hinge);
     add(horn, new V3(0, 1.5, 0.25), (p, obj) => {
       const a = p.hornAngle * D2R;
-      for (const {pv, s} of halves) {
+      for (const {pv, h, s} of halves) {
         pv.rotation.z = -s * a;
         pv.position.set(s * (0.02 + HORN.spread * p.horn), 0.06 - HORN.drop * p.horn, 0);
+        h.position.y = -0.06 - HORN.sink * p.horn;
       }
     });
     anchors.horn = {obj: halves[0].pv, p: new V3(0.05, 3.1, 1.36)};
@@ -326,18 +392,24 @@ export function buildHead() {
       const g = geoOf(fill);
       return s > 0 ? g : mirrorX(g);
     };
-    const shell = mk((m) => prism(m, [[0.012, -0.1], [0.95, 0.26], [0.84, -0.42], [0.5, -1.05], [0.15, -1.12], [0.15, -1.55], [0.012, -1.55]], 'z', (x, y) => maskFar(x, y) - 0.2, maskFar, 0.03));
-    const chin = mk((m) => prism(m, [[0.012, -1.1], [0.14, -1.1], [0.14, -1.53], [0.012, -1.53]], 'z', (x, y) => maskFar(x, y) - 0.1, (x, y) => maskFar(x, y) + 0.05, 0.02));
+    const shell = mk((m) => prism(m, [[0.012, -0.1], [0.95, 0.26], [0.84, -0.42], [0.5, -1.05], [0.15, -1.12], [0.012, -1.12]], 'z', (x, y) => maskFar(x, y) - 0.2, maskFar, 0.03));
+    // the mask's chin quarter is its own part: it tucks up behind the faceplate instead of riding out with the half
+    const jaw = mk((m) => prism(m, [[0.012, -1.135], [0.15, -1.135], [0.15, -1.55], [0.012, -1.55]], 'z', (x, y) => maskFar(x, y) - 0.2, maskFar, 0.025));
+    const chin = mk((m) => prism(m, [[0.012, -1.16], [0.14, -1.16], [0.14, -1.53], [0.012, -1.53]], 'z', (x, y) => maskFar(x, y) - 0.1, (x, y) => maskFar(x, y) + 0.05, 0.02));
+    const jg = new THREE.Group();
+    jg.add(mesh(jaw, M.white), mesh(chin, M.white));
+    add(jg, new V3(s * 0.4, -1.0, 0.9), (p, obj) => obj.position.add(new V3(0, 0.28 * p.mask, -0.42 * p.mask)));
     const visor = mk((m) => prism(m, [[0.012, 0.12], [0.012, -0.1], [0.95, 0.26], [0.97, 0.4], [0.85, 0.47]], 'z', (x, y) => visorFar(x, y) - 0.15, visorFar, 0.015));
-    const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white), mesh(chin, M.white));
+    const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white));
     const vg = new THREE.Group();
     vg.add(mesh(visor, M.visor, false));
     // the visor retracts into the brow before the mask halves part
     add(vg, new V3(s * 0.5, 0.3, 1.2), (p, obj) => obj.position.add(new V3(0, 0.05 * p.mask, -0.44 * Math.min(1, p.mask * 1.6))));
     add(pv, new V3(s * 1.0, -0.2, 0.95), (p, obj) => {
       const k = p.mask;
-      obj.position.add(new V3(s * MASK.slide * k, -0.04 * k, -MASK.back * k));
-      obj.rotation.y = -s * MASK.yaw * k;
+      // slide out and back, outer edge swinging behind the cheek guard, so only the inner face stays in view
+      obj.position.add(new V3(s * MASK.slide * k, -MASK.drop * k, -MASK.back * k));
+      obj.rotation.y = s * MASK.yaw * k;
     });
     if (s > 0) anchors.mask = {obj: pv, p: new V3(0.45, -0.55, 1.15)};
   }
@@ -366,10 +438,11 @@ export function buildHead() {
   // ---------------------------------------------------------------- dual-eye sensor unit
   {
     const g = new THREE.Group();
-    g.add(mesh(geoOf((m) => prism(m, [[-0.74, 0.2], [0.74, 0.2], [0.78, -0.2], [-0.78, -0.2]], 'z', 0.7, (x) => 1.02 - 0.28 * Math.abs(x), 0.03)), M.frame, false));
+    g.add(mesh(geoOf((m) => prism(m, [[-0.84, 0.44], [-0.1, 0.1], [0.1, 0.1], [0.84, 0.44], [0.84, -0.2], [-0.84, -0.2]], 'z', 0.7, (x) => 1.0 - 0.26 * Math.abs(x), 0.03)), M.frame, false));
     const eyeFar = (x, y) => 1.1 + 0.1 * y - 0.3 * Math.abs(x);
-    const eyes = mesh(geoOf((m) => prism(m, [[0.1, -0.12], [0.45, 0.1], [0.7, 0.15], [0.67, -0.03], [0.2, -0.19]], 'z', 0.9, eyeFar, 0.02, {mirror: true})), M.green, false);
+    const eyes = mesh(geoOf((m) => prism(m, [[0.15, 0.03], [0.72, 0.31], [0.8, 0.33], [0.78, 0.18], [0.22, -0.1]], 'z', 0.88, eyeFar, 0.02, {mirror: true})), M.green, false);
     g.add(eyes);
+    g.add(mesh(geoOf((m) => prism(m, [[0.11, 0.06], [0.74, 0.37], [0.85, 0.38], [0.83, 0.13], [0.2, -0.15]], 'z', 0.86, (x, y) => eyeFar(x, y) - 0.03, 0.01, {mirror: true})), M.red, false));
     add(g, new V3(0, 0.05, 1.25));
     anchors.eyes = {obj: g, p: new V3(0.4, 0.0, 1.0)};
   }
@@ -494,7 +567,7 @@ export function buildHead() {
   };
 
   const tmp = new V3();
-  const RED_OFF = new THREE.Color('#3a2a29');
+  const RED_OFF = new THREE.Color('#4a1a17');
   const RED_ON = new THREE.Color('#d41a10');
   const update = ({d = 0, explode = 0, armor = 1, time = 0, ink = true}) => {
     const p = pose(d);
@@ -508,9 +581,9 @@ export function buildHead() {
     for (const l of inkLines) l.visible = ink;
     // psycho-frame: dull red at rest, a breathing glow as NT-D builds
     const beat = 0.5 + 0.5 * Math.sin(time * (2.2 + 2 * p.frame));
-    M.red.emissiveIntensity = p.frame * (2.4 + 1.8 * beat);
+    M.red.emissiveIntensity = p.frame * (0.9 + 0.7 * beat);
     M.red.color.copy(RED_OFF).lerp(RED_ON, p.frame);
-    M.green.emissiveIntensity = 0.04 + 3.4 * p.eyes;
+    M.green.emissiveIntensity = 0.04 + 2.5 * p.eyes;
     return p;
   };
   const anchorWorld = (k, out = tmp) => {

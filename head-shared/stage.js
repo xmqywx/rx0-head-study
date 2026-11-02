@@ -69,7 +69,7 @@ export function createHeadStage({canvas}) {
   composer.addPass(new Toggle(groundVis(false)));
   composer.addPass(gtao);
   composer.addPass(new Toggle(groundVis(true)));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.42, 0.35, 1.7);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.22, 1.7);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 

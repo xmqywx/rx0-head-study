@@ -30,10 +30,11 @@ export const stage = (d, k) => ease((d - STAGES[k][0]) / (STAGES[k][1] - STAGES[
 export const raw = (d, k) => clamp01((d - STAGES[k][0]) / (STAGES[k][1] - STAGES[k][0]));
 
 // mechanism constants (units)
-export const HORN = {root: [0, 1.45, 0.95], tip: [0, 4.57, 1.55], split: 54, spread: 0.24, drop: 0.3};
+export const HORN = {root: [0, 1.45, 0.95], tip: [0, 4.57, 1.55], split: 57, spread: 0.42, drop: 0.5, sink: 0.6};
 HORN.len = Math.hypot(HORN.tip[1] - HORN.root[1], HORN.tip[2] - HORN.root[2]);
-export const MASK = {slide: 0.3, back: 0.26, yaw: 0.3};
-export const CROWN = {lift: 0.07, rise: 0.1};
+export const MASK = {slide: 0.38, back: 0.3, yaw: 0.35, drop: 0.12};
+export const CROWN = {lift: 0.13, rise: 0.08};
+export const FRAME_RISE = 0.13; // the psycho-frame pushes out into the opened seams
 export const FIN = {rise: 0.36};
 export const FACE = {travel: 0.14};
 const COLLAR_Y = -1.72;
@@ -48,8 +49,9 @@ export function readouts(d) {
   const p = pose(d);
   const a = p.hornAngle * (Math.PI / 180);
   // horn half tip: rotated about its hinge, then the hinge spreads and drops
-  const tipX = HORN.len * Math.sin(a) + HORN.spread * p.horn;
-  const tipY = HORN.root[1] + HORN.len * Math.cos(a) * 0.985 - HORN.drop * p.horn;
+  const L = HORN.len - HORN.sink * p.horn; // the halves slide down into the head as they open
+  const tipX = L * Math.sin(a) + HORN.spread * p.horn;
+  const tipY = HORN.root[1] + L * Math.cos(a) * 0.985 - HORN.drop * p.horn;
   const top = Math.max(tipY, 2.17 + (CROWN.rise + 0.05) * p.crown); // horn tip or the crown ridge, whichever is higher
   return {
     hornAngle: p.hornAngle,

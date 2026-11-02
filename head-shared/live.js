@@ -2,6 +2,7 @@
 // pulls every assembly off the skull, ARMOR fades the white plates to show the frame. Drag to orbit, wheel to zoom,
 // keys: N NT-D, E explode, X armor, 1-7 views, L labels. Left alone, it tours itself; any input hands control over and
 // 25 s of quiet hands it back. #ortho=unicorn|destroy renders the four sheet views for overlay checks instead.
+import * as THREE from 'three';
 import {warmComposer} from 'teardown-kit/warm.js';
 import {readouts, STAGE_NAME, STAGE_ORDER, UNIT_M} from './kin.js';
 import {createHeadStage} from './stage.js';
@@ -367,11 +368,31 @@ export function runLive() {
     svg.append(line, dot);
     return {lab, div, line, dot, a: 0};
   });
+  // a label whose part is hidden behind other parts (from this camera) fades out; checked a few times a second
+  const ray = new THREE.Raycaster();
+  const dir = new THREE.Vector3();
+  let occT = 0;
+  const occluded = (P, w) => {
+    dir.copy(w).sub(st.camera.position);
+    const dist = dir.length();
+    ray.set(st.camera.position, dir.normalize());
+    ray.far = dist;
+    for (const h of ray.intersectObject(st.head.root, true)) {
+      const m = h.object.material;
+      if (!h.object.isMesh || (m.transparent && m.opacity < 0.5)) continue;
+      return h.distance < dist - 0.3;
+    }
+    return false;
+  };
   const drawLabels = (dt) => {
+    occT -= dt;
+    const recheck = occT <= 0;
+    if (recheck) occT = 0.15;
     const c = st.project(st.head.anchorWorld('collar').clone().set(0, 1.2, 0));
     const vis = [];
     for (const P of pool) {
-      const on = S.labels && (P.lab.show ? P.lab.show(S.d, S.ex, S.armor) : true);
+      if (recheck) P.hid = occluded(P, st.head.anchorWorld(P.lab.k).clone());
+      const on = S.labels && !P.hid && (P.lab.show ? P.lab.show(S.d, S.ex, S.armor) : true);
       P.a = clamp(P.a + (on ? dt : -dt) * 4, 0, 1);
       const p = P.a > 0 ? st.project(st.head.anchorWorld(P.lab.k)) : null;
       if (!p || P.a <= 0) {
