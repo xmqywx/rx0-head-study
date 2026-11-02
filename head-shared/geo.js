@@ -1,0 +1,306 @@
+// Geometry kit for the RX-0 head: faceted armor built from flat triangles (every face its own normal, so planes read
+// as planes), with a chamfer on every plate so edges catch the light like a kit part.
+//   Mesher      collects triangles; each one is turned to face a hint direction, so winding never has to be tracked.
+//   prism()     a 2D outline extruded between two height functions (planar if they are linear), chamfered on top.
+//   shellPlate  a trapezoid patch of the helmet surface S(u, y), thickened along its normal, chamfered, gapped.
+//   sweep()     a cross-section carried along a path (horn halves, the crown ridge).
+import * as THREE from 'three';
+
+const V3 = THREE.Vector3;
+export const D2R = Math.PI / 180;
+const lerp = (a, b, t) => a + (b - a) * t;
+
+export class Mesher {
+  constructor() {
+    this.p = [];
+  }
+  tri(a, b, c, hint) {
+    if (hint) {
+      const n = new V3().subVectors(b, a).cross(new V3().subVectors(c, a));
+      if (n.dot(hint) < 0) [b, c] = [c, b];
+    }
+    this.p.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  }
+  quad(a, b, c, d, hint) {
+    this.tri(a, b, c, hint);
+    this.tri(a, c, d, hint);
+  }
+  geo() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    return g;
+  }
+}
+
+const area2 = (P) => P.reduce((s, p, i) => s + p[0] * P[(i + 1) % P.length][1] - P[(i + 1) % P.length][0] * p[1], 0);
+
+// inset a CCW polygon by d (miter joins, clamped)
+export function inset(P, d) {
+  const n = P.length;
+  return P.map((p, i) => {
+    const a = P[(i - 1 + n) % n];
+    const b = P[(i + 1) % n];
+    const e1 = [p[0] - a[0], p[1] - a[1]];
+    const e2 = [b[0] - p[0], b[1] - p[1]];
+    const l1 = Math.hypot(...e1) || 1;
+    const l2 = Math.hypot(...e2) || 1;
+    const n1 = [e1[1] / l1, -e1[0] / l1];
+    const n2 = [e2[1] / l2, -e2[0] / l2];
+    const k = 1 + n1[0] * n2[0] + n1[1] * n2[1];
+    const m = Math.min(1 / Math.max(k, 0.25), 3);
+    return [p[0] - d * (n1[0] + n2[0]) * m, p[1] - d * (n1[1] + n2[1]) * m];
+  });
+}
+
+// plane coordinates (a, b) plus height h → world, for an extrusion along 'x', 'y' or 'z'
+const AX = {
+  z: (a, b, h) => new V3(a, b, h),
+  x: (a, b, h) => new V3(h, b, a),
+  y: (a, b, h) => new V3(a, h, b),
+};
+const AXV = {z: new V3(0, 0, 1), x: new V3(1, 0, 0), y: new V3(0, 1, 0)};
+
+/**
+ * poly: [[a, b], ...]; near/far: (a, b) => h (numbers allowed); bevel: chamfer on the far face. mirror: also emit the
+ * copy with the first world axis negated (for 'z' and 'y' prisms) or the extrusion negated (for 'x').
+ */
+export function prism(m, poly, axis, near, far, bevel = 0.03, {mirror = false} = {}) {
+  const N = typeof near === 'number' ? () => near : near;
+  const F = typeof far === 'number' ? () => far : far;
+  let P = poly.map((p) => [...p]);
+  if (area2(P) < 0) P.reverse();
+  const Q = bevel > 0 ? inset(P, bevel) : P;
+  const map = AX[axis];
+  const up = AXV[axis];
+  const emit = (mx) => {
+    const W = (a, b, h) => {
+      const v = map(a, b, h);
+      if (mx) {
+        if (axis === 'x') v.x = -v.x;
+        else v.x = -v.x;
+      }
+      return v;
+    };
+    const flip = (v) => {
+      const w = v.clone();
+      if (mx) w.x = -w.x;
+      return w;
+    };
+    const s = Math.sign(F(P[0][0], P[0][1]) - N(P[0][0], P[0][1])) || 1;
+    const topN = flip(up.clone().multiplyScalar(s));
+    const botN = topN.clone().negate();
+    const tris = THREE.ShapeUtils.triangulateShape(Q.map((q) => new THREE.Vector2(q[0], q[1])), []);
+    const trisP = THREE.ShapeUtils.triangulateShape(P.map((q) => new THREE.Vector2(q[0], q[1])), []);
+    const top = Q.map(([a, b]) => W(a, b, F(a, b)));
+    const rim = P.map(([a, b]) => W(a, b, F(a, b) - s * bevel * 0.8));
+    const bot = P.map(([a, b]) => W(a, b, N(a, b)));
+    for (const [i, j, k] of tris) m.tri(top[i], top[j], top[k], topN);
+    for (const [i, j, k] of trisP) m.tri(bot[i], bot[j], bot[k], botN);
+    const n = P.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const e = [P[j][0] - P[i][0], P[j][1] - P[i][1]];
+      const out2 = [e[1], -e[0]];
+      const out = flip(map(out2[0], out2[1], 0).normalize());
+      if (bevel > 0) m.quad(top[i], top[j], rim[j], rim[i], out.clone().add(topN));
+      m.quad(rim[i], rim[j], bot[j], bot[i], out);
+    }
+  };
+  emit(false);
+  if (mirror) emit(true);
+  return m;
+}
+
+/**
+ * The helmet surface. sections: [[y, halfWidth, zFront, zBack], ...] bottom to top. u: radians, 0 = front (+z),
+ * +90° = the head's left (+x). Cross sections are superellipses (exponent p) so the shell reads boxy, not egg-like.
+ */
+export function makeSurface(sections, p = 2.6, scale = 1) {
+  const ys = sections.map((s) => s[0]);
+  const at = (y) => {
+    let i = 0;
+    while (i < sections.length - 2 && y > sections[i + 1][0]) i++;
+    const a = sections[i];
+    const b = sections[i + 1];
+    const t = Math.min(1, Math.max(0, (y - a[0]) / (b[0] - a[0])));
+    return [lerp(a[1], b[1], t), lerp(a[2], b[2], t), lerp(a[3], b[3], t)];
+  };
+  const e = 2 / p;
+  const S = (u, y, out = new V3()) => {
+    const [hw, zf, zb] = at(y);
+    const s = Math.sin(u);
+    const c = Math.cos(u);
+    const zc = (zf + zb) / 2;
+    const hd = (zf - zb) / 2;
+    return out.set(hw * scale * Math.sign(s) * Math.abs(s) ** e, y, zc + hd * scale * Math.sign(c) * Math.abs(c) ** e);
+  };
+  const CEN = new V3(0, 0.3, -0.15);
+  const normal = (u, y) => {
+    const du = 0.004;
+    const dy = 0.004;
+    const a = S(u + du, y).sub(S(u - du, y));
+    const b = S(u, y + dy).sub(S(u, y - dy));
+    const n = a.cross(b).normalize();
+    if (!Number.isFinite(n.x)) n.copy(S(u, y)).sub(CEN).normalize();
+    if (n.dot(S(u, y).sub(CEN)) < 0) n.negate();
+    return n;
+  };
+  return {S, normal, ys, at};
+}
+
+/**
+ * A plate on surface `surf`. c: {ub: [u0, u1] at y0, ut: [u0, u1] at y1, y: [y0, y1]} in degrees and units.
+ * t: thickness, off: base offset along the normal, gap: clearance to neighbours, nu: facets across.
+ * Returns {geo, center, normal} with the geometry in world coordinates.
+ */
+export function shellPlate(surf, c, {t = 0.09, off = 0, gap = 0.025, bevel = 0.035, nu = 0, mirror = false} = {}) {
+  // y may slant: yb = [y at u0, y at u1] along the bottom edge, yt along the top; c.y = [y0, y1] for level edges
+  const yb = c.yb || [c.y[0], c.y[0]];
+  const yt = c.yt || [c.y[1], c.y[1]];
+  const y0 = (yb[0] + yb[1]) / 2;
+  const y1 = (yt[0] + yt[1]) / 2;
+  const meanHw = surf.at((y0 + y1) / 2)[0];
+  const gu = (gap / Math.max(meanHw, 0.35)) / D2R;
+  const bu = (bevel / Math.max(meanHw, 0.35)) / D2R;
+  const corner = (ins, insy) => ({
+    ub: [c.ub[0] + ins, c.ub[1] - ins],
+    ut: [c.ut[0] + ins, c.ut[1] - ins],
+    yb: [yb[0] + insy, yb[1] + insy],
+    yt: [yt[0] - insy, yt[1] - insy],
+  });
+  const full = corner(gu, gap);
+  const topR = corner(gu + bu, gap + bevel);
+  const span = Math.max(c.ub[1] - c.ub[0], c.ut[1] - c.ut[0]);
+  const NU = nu || Math.max(1, Math.round(span / 16));
+  // b samples: plate ends plus every surface section strictly inside (measured on the centre line)
+  const bs = [0];
+  for (const y of surf.ys) if (y > y0 + 0.02 && y < y1 - 0.02) bs.push((y - y0) / (y1 - y0));
+  bs.push(1);
+  const yAt = (R, a, b) => lerp(lerp(R.yb[0], R.yb[1], a), lerp(R.yt[0], R.yt[1], a), b);
+  const uAt = (R, a, b) => lerp(lerp(R.ub[0], R.ut[0], b), lerp(R.ub[1], R.ut[1], b), a) * D2R;
+  const pt = (R, a, b, h) => {
+    const yy = yAt(R, a, b);
+    const u = uAt(R, a, b);
+    return surf.S(u, yy).addScaledVector(surf.normal(u, yy), off + h);
+  };
+  const as = Array.from({length: NU + 1}, (_, i) => i / NU);
+  const G = (R, h) => bs.map((b) => as.map((a) => pt(R, a, b, h)));
+  const top = G(topR, t);
+  const rim = G(full, t - bevel * 0.8);
+  const base = G(full, 0);
+  const center = surf.S(uAt(full, 0.5, 0.5), yAt(full, 0.5, 0.5));
+  const nrm = surf.normal(uAt(full, 0.5, 0.5), yAt(full, 0.5, 0.5));
+  const m = new Mesher();
+  const nb = bs.length;
+  const na = as.length;
+  const nAt = (i, j) => surf.normal(uAt(full, as[j], bs[i]), yAt(full, as[j], bs[i]));
+  for (let i = 0; i < nb - 1; i++)
+    for (let j = 0; j < na - 1; j++) {
+      const h = nAt(i, j);
+      m.quad(top[i][j], top[i][j + 1], top[i + 1][j + 1], top[i + 1][j], h);
+      m.quad(base[i][j], base[i][j + 1], base[i + 1][j + 1], base[i + 1][j], h.clone().negate());
+    }
+  // the border, walked once around: rim chamfer up to the top, wall down to the base
+  const ring = [];
+  for (let j = 0; j < na; j++) ring.push([0, j]);
+  for (let i = 1; i < nb; i++) ring.push([i, na - 1]);
+  for (let j = na - 2; j >= 0; j--) ring.push([nb - 1, j]);
+  for (let i = nb - 2; i > 0; i--) ring.push([i, 0]);
+  const mid = new V3();
+  for (let k = 0; k < ring.length; k++) {
+    const [i0, j0] = ring[k];
+    const [i1, j1] = ring[(k + 1) % ring.length];
+    mid.addVectors(base[i0][j0], base[i1][j1]).multiplyScalar(0.5);
+    const n = nAt(i0, j0);
+    const out = mid.clone().sub(center);
+    out.addScaledVector(n, -out.dot(n)).normalize();
+    m.quad(top[i0][j0], top[i1][j1], rim[i1][j1], rim[i0][j0], out.clone().add(n));
+    m.quad(rim[i0][j0], rim[i1][j1], base[i1][j1], base[i0][j0], out);
+  }
+  let geo = m.geo();
+  if (mirror) {
+    geo = geo.clone();
+    geo.scale(-1, 1, 1);
+    flipWinding(geo);
+    center.x = -center.x;
+    nrm.x = -nrm.x;
+  }
+  return {geo, center, normal: nrm};
+}
+
+export function flipWinding(geo) {
+  const p = geo.attributes.position.array;
+  for (let i = 0; i < p.length; i += 9)
+    for (let k = 0; k < 3; k++) {
+      const t = p[i + 3 + k];
+      p[i + 3 + k] = p[i + 6 + k];
+      p[i + 6 + k] = t;
+    }
+  geo.attributes.position.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** mirror a geometry across x = 0 (keeps faces outward) */
+export function mirrorX(geo) {
+  const g = geo.clone();
+  g.scale(-1, 1, 1);
+  return flipWinding(g);
+}
+
+/**
+ * A cross-section swept along a path. path: [V3], up: [V3] (the section's "n" direction at each point), section(i):
+ * [[l, n], ...] closed loop in the (lateral, up) frame. Caps both ends.
+ */
+export function sweep(m, path, up, section) {
+  const rings = path.map((p, i) => {
+    const tg = (path[Math.min(i + 1, path.length - 1)].clone().sub(path[Math.max(i - 1, 0)])).normalize();
+    const n = up[i].clone().addScaledVector(tg, -up[i].dot(tg)).normalize();
+    const l = new V3().crossVectors(tg, n).normalize();
+    return {pts: section(i).map(([a, b]) => p.clone().addScaledVector(l, a).addScaledVector(n, b)), tg, c: p};
+  });
+  for (let i = 0; i < rings.length - 1; i++) {
+    const A = rings[i].pts;
+    const B = rings[i + 1].pts;
+    const k = A.length;
+    const cen = rings[i].c.clone().add(rings[i + 1].c).multiplyScalar(0.5);
+    for (let j = 0; j < k; j++) {
+      const j1 = (j + 1) % k;
+      const out = A[j].clone().add(A[j1]).add(B[j]).add(B[j1]).multiplyScalar(0.25).sub(cen);
+      m.quad(A[j], A[j1], B[j1], B[j], out);
+    }
+  }
+  const cap = (r, s) => {
+    const c = r.pts.reduce((a, p) => a.add(p), new V3()).multiplyScalar(1 / r.pts.length);
+    for (let j = 0; j < r.pts.length; j++) m.tri(c, r.pts[j], r.pts[(j + 1) % r.pts.length], r.tg.clone().multiplyScalar(s));
+  };
+  cap(rings[0], -1);
+  cap(rings[rings.length - 1], 1);
+  return m;
+}
+
+/** a closed faceted body lofted through the surface's sections (the inner skull) */
+export function loftBody(surf, ys, nu = 20) {
+  const m = new Mesher();
+  const rows = ys.map((y) => Array.from({length: nu}, (_, j) => surf.S((j / nu) * Math.PI * 2, y)));
+  const CEN = new V3(0, 0.3, -0.15);
+  for (let i = 0; i < rows.length - 1; i++)
+    for (let j = 0; j < nu; j++) {
+      const a = rows[i][j];
+      const b = rows[i][(j + 1) % nu];
+      const c = rows[i + 1][(j + 1) % nu];
+      const d = rows[i + 1][j];
+      const h = a.clone().add(c).multiplyScalar(0.5).sub(CEN);
+      m.quad(a, b, c, d, h);
+    }
+  for (const [row, s] of [
+    [rows[0], -1],
+    [rows[rows.length - 1], 1],
+  ]) {
+    const c = row.reduce((a, p) => a.add(p), new V3()).multiplyScalar(1 / row.length);
+    for (let j = 0; j < nu; j++) m.tri(c, row[j], row[(j + 1) % nu], new V3(0, s, 0));
+  }
+  return m.geo();
+}
