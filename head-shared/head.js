@@ -223,7 +223,10 @@ export function buildHead() {
         if (s < 0) k.scale.x = -1;
         g.add(k);
       }
-    const part = add(g, new V3(0, 0, 0.55), (q, obj) => obj.position.z += 0.04 * q.frame);
+    const part = add(g, new V3(0, 0, 0.55), (q, obj) => {
+      obj.position.z += 0.04 * q.frame;
+      obj.visible = q.mask > 0.02; // behind the closed mask it only shows as red slivers in the gaps
+    });
     frameParts.push(part);
     anchors.frameFace = {obj: g, p: new V3(0.42, -0.4, 1.0)};
   }
@@ -548,14 +551,25 @@ export function buildHead() {
       const g = geoOf(fill);
       return s > 0 ? g : mirrorX(g);
     };
-    const shell = mk((m) => prism(m, [[0.012, -0.1], [0.95, 0.26], [0.84, -0.42], [0.5, -1.05], [0.15, -1.12], [0.012, -1.12]], 'z', (x, y) => maskFar(x, y) - 0.2, maskFar, 0.03));
+    // three facets per half, read off the Unicorn front view (reference/grid/u-face.png): a flat inner panel, an outer
+    // facet turning back toward the cheek, and the lower V that narrows to the chin; side view front edge z = 1.30 + .16 y
+    const fz = (x, y) => 1.3 + 0.16 * y;
+    const FAC = [
+      [[[0.012, -0.12], [0.33, 0.015], [0.23, -0.87], [0.012, -0.87]], (x, y) => fz(x, y) - 0.05 * x],
+      [[[0.33, 0.015], [0.73, 0.18], [0.68, -0.15], [0.61, -0.47], [0.23, -0.87]], (x, y) => fz(x, y) - 0.0165 - 0.45 * (x - 0.33)],
+      [[[0.012, -0.87], [0.23, -0.87], [0.61, -0.47], [0.4, -0.9], [0.13, -1.2], [0.012, -1.2]], (x, y) => fz(x, y) + 0.02 - 0.3 * x],
+    ];
+    const shell = mk((m) => {
+      for (const [P, far] of FAC) prismSplit(m, P, 'z', (x, y) => far(x, y) - 0.22, far, 0.025, [], {gap: 0.02});
+    });
+    const maskFar2 = (x, y) => fz(x, y) - 0.3 * x;
     // the mask's chin quarter is its own part: it tucks up behind the faceplate instead of riding out with the half
-    const jaw = mk((m) => prism(m, [[0.012, -1.135], [0.15, -1.135], [0.15, -1.55], [0.012, -1.55]], 'z', (x, y) => maskFar(x, y) - 0.2, maskFar, 0.025));
-    const chin = mk((m) => prism(m, [[0.012, -1.16], [0.14, -1.16], [0.14, -1.53], [0.012, -1.53]], 'z', (x, y) => maskFar(x, y) - 0.1, (x, y) => maskFar(x, y) + 0.05, 0.02));
+    const jaw = mk((m) => prism(m, [[0.012, -1.215], [0.15, -1.215], [0.15, -1.55], [0.012, -1.55]], 'z', (x, y) => maskFar2(x, y) - 0.2, maskFar2, 0.025));
+    const chin = mk((m) => prism(m, [[0.012, -1.22], [0.12, -1.22], [0.12, -1.53], [0.012, -1.53]], 'z', (x, y) => maskFar2(x, y) - 0.1, (x, y) => maskFar2(x, y) + 0.05, 0.02));
     const jg = new THREE.Group();
     jg.add(mesh(jaw, M.white), mesh(chin, M.white));
     add(jg, new V3(s * 0.4, -1.0, 0.9), (p, obj) => obj.position.add(new V3(0, 0.28 * p.mask, -0.42 * p.mask)));
-    const visor = mk((m) => prism(m, [[0.012, 0.12], [0.012, -0.1], [0.95, 0.26], [0.97, 0.4], [0.85, 0.47]], 'z', (x, y) => visorFar(x, y) - 0.15, visorFar, 0.015));
+    const visor = mk((m) => prism(m, [[0.012, 0.125], [0.012, -0.12], [0.73, 0.18], [0.93, 0.24], [0.93, 0.33]], 'z', (x, y) => visorFar(x, y) - 0.15, visorFar, 0.015));
     const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white));
     const vg = new THREE.Group();
     vg.add(mesh(visor, M.visor, false));
@@ -631,28 +645,12 @@ export function buildHead() {
 
   // ---------------------------------------------------------------- cheek guards
   for (const s of [1, -1]) {
-    // the side plate, traced from the segmented sheet's side view: a main plate reaching back under the pod and a
-    // front piece that folds inward along a crease, down to the jaw point
-    const geo = geoOf((m) =>
-      prismSplit(
-        m,
-        [[1.33, -0.12], [1.1, 0.1], [0.88, 0.08], [0.48, 0.25], [0.3, 0.25], [0.35, -0.4], [0.6, -0.6], [0.8, -0.9], [1.13, -0.9], [1.2, -0.78]],
-        'x',
-        0.62,
-        (a, b, P) => {
-          const front = P.reduce((q, v) => q + v[0], 0) / P.length > 0.95;
-          return 1.0 - 0.13 * (a - 0.5) - (front ? 0.25 * Math.max(0, a - 0.95) : 0);
-        },
-        0.03,
-        [[0.98, 0.1, 0.939]],
-        {gap: 0.02},
-      ),
-    );
-    const cap = geoOf((m) =>
-      prism(m, [[0.7, -0.3], [0.92, -0.16], [0.94, -0.55], [0.82, -1.05], [0.66, -1.0], [0.66, -0.6]], 'z', 0.85, (x, y) => 1.24 - 0.28 * (x - 0.62) + 0.06 * y, 0.03),
-    );
+    // a tall plate standing just outside the mask (front view: x .68–.93, its front face a narrow strip; side view:
+    // z .48–.93, y .08 down to −1.2 with a slanted back edge), its front face sloping back toward the top
+    const side = [[0.93, 0.03], [0.48, 0.08], [0.5, -0.45], [0.63, -0.85], [0.93, -1.2]];
+    const geo = geoOf((m) => prismSplit(m, side, 'x', 0.64, (a, b) => 0.95 - 0.1 * (a - 0.48) + (b < -0.25 ? 0.18 * Math.min(1, (-0.25 - b) / 0.3) : 0), 0.03, [[0, 1, -0.55]], {gap: 0.018}));
     const g = new THREE.Group();
-    g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white), mesh(s > 0 ? cap : mirrorX(cap), M.white));
+    g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white));
     add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (0.12 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.06 * p.cheek)));
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }
@@ -684,6 +682,16 @@ export function buildHead() {
       }
       if (bar) pod.add(mesh(M2(geoOf((m) => prism(m, [[za, Y(588)], [zb, Y(588)], [zb, Y(594)], [za, Y(594)]], 'x', 1.26, 1.35, 0.008))), M.white));
     };
+    // the pod's front face carries a window too (front view: x .98–1.18, y .23 to −.2)
+    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.99, 0.22], [1.17, 0.22], [1.17, -0.19], [0.99, -0.19]], 'z', 0.4, 0.492, 0.006))), M.lens, false));
+    for (const q of [[[0.96, 0.25], [1.2, 0.25], [1.2, 0.22], [0.96, 0.22]], [[0.96, -0.19], [1.2, -0.19], [1.2, -0.22], [0.96, -0.22]], [[0.96, 0.25], [0.99, 0.25], [0.99, -0.22], [0.96, -0.22]], [[1.17, 0.25], [1.2, 0.25], [1.2, -0.22], [1.17, -0.22]]])
+      pod.add(mesh(M2(geoOf((m) => prism(m, q, 'z', 0.42, 0.53, 0.01))), M.white));
+    for (let k = 1; k < 5; k++) {
+      const yy = 0.22 - (0.41 * k) / 5;
+      pod.add(mesh(M2(geoOf((m) => prism(m, [[0.99, yy + 0.012], [1.17, yy + 0.012], [1.17, yy - 0.012], [0.99, yy - 0.012]], 'z', 0.42, 0.5, 0.003))), M.grey, false));
+    }
+    // the tall housing above the pod: in the front view the pod column runs up to y .85 and chamfers in at the top
+    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.45, 0.43], [-0.77, 0.43], [-0.85, 0.62], [-0.6, 0.75], [0.2, 0.85], [0.45, 0.62]], 'x', 0.92, (a, b) => 1.3 - 0.6 * Math.max(0, b - 0.6), 0.035))), M.white));
     win(577, 589, 566, 609, 4, false);
     win(630, 671, 566, 616, 5, true);
     // the little mark on the frame's top back corner
