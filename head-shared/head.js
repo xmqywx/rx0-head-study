@@ -212,7 +212,7 @@ export function buildHead() {
     const g = new THREE.Group();
     const face = (x, y) => 1.08 + 0.12 * y - 0.25 * x;
     g.add(
-      mesh(geoOf((m) => prism(m, [[0.37, 0.06], [0.47, 0.06], [0.46, -0.6], [0.31, -1.1], [0.23, -1.06], [0.37, -0.6]], 'z', 0.76, face, 0.02, {mirror: true})), M.red, false),
+      mesh(geoOf((m) => prism(m, [[0.37, 0.04], [0.47, 0.04], [0.47, -0.58], [0.84, -0.96], [0.78, -1.06], [0.37, -0.66]], 'z', 0.7, face, 0.02, {mirror: true})), M.red, false),
       mesh(geoOf((m) => prism(m, [[0.08, 0.17], [0.8, 0.47], [0.88, 0.37], [0.1, 0.06]], 'z', 0.88, (x) => 1.25 - 0.3 * x, 0.02, {mirror: true})), M.red, false),
       mesh(geoOf((m) => prism(m, [[0.19, 0.5], [0.3, 0.58], [0.3, 1.52], [0.19, 1.62]], 'z', 0.95, (x, y) => 1.34 - 0.3 * (y - 0.5), 0.02, {mirror: true})), M.red, false),
     );
@@ -292,11 +292,20 @@ export function buildHead() {
   // ---------------------------------------------------------------- brow and forehead block (main camera, horn root)
   const browFar = (x, y) => 1.62 - 0.4 * x - 0.25 * (y - 0.3);
   {
-    const brow = geoOf((m) =>
-      prism(m, [[0.17, 0.14], [0.85, 0.47], [1.0, 0.56], [1.0, 0.8], [0.62, 1.1], [0.17, 0.98]], 'z', (x, y) => browFar(x, y) - 0.32, browFar, 0.035, {mirror: true}),
+    // the eyebrow: a narrow blade along the top of the eyes, it stays put
+    const blade = geoOf((m) =>
+      prism(m, [[0.17, 0.14], [0.85, 0.47], [1.0, 0.56], [0.96, 0.69], [0.3, 0.44], [0.17, 0.38]], 'z', (x, y) => browFar(x, y) - 0.3, (x, y) => browFar(x, y) + 0.02, 0.03, {mirror: true}),
     );
+    // the upper brow: lifts and slides back in NT-D, opening a red seam above the blade
+    const upper = geoOf((m) =>
+      prism(m, [[0.17, 0.4], [0.3, 0.46], [0.96, 0.71], [1.0, 0.8], [0.62, 1.1], [0.17, 0.98]], 'z', (x, y) => browFar(x, y) - 0.3, browFar, 0.035, {mirror: true}),
+    );
+    const seam = geoOf((m) => prism(m, [[0.19, 0.35], [0.95, 0.62], [0.98, 0.78], [0.21, 0.52]], 'z', 0.95, (x, y) => browFar(x, y) - 0.07, 0.015, {mirror: true}));
     const g = new THREE.Group();
-    g.add(mesh(brow, M.white));
+    g.add(mesh(blade, M.white), mesh(seam, M.red, false));
+    const ug = new THREE.Group();
+    ug.add(mesh(upper, M.white));
+    add(ug, new V3(0, 0.45, 0.9), (p, obj) => obj.position.add(new V3(0, 0.11 * p.crown, -0.06 * p.crown)));
     // vulcan muzzles in the brow corners
     add(g, new V3(0, 0.15, 1.0), (p, obj) => obj.position.add(new V3(0, 0, 0.04 * p.crown)));
     anchors.brow = {obj: g, p: new V3(0.55, 0.85, 1.42)};
@@ -478,9 +487,12 @@ export function buildHead() {
     const geo = geoOf((m) =>
       prism(m, [[1.26, -0.02], [1.3, -0.42], [1.12, -0.95], [0.62, -1.02], [0.48, -0.55], [0.6, -0.02]], 'x', 0.7, (a) => 0.99 - 0.13 * (a - 0.5), 0.035),
     );
+    const cap = geoOf((m) =>
+      prism(m, [[0.7, -0.3], [0.98, -0.16], [1.0, -0.6], [0.8, -1.12], [0.6, -1.05], [0.62, -0.62]], 'z', 0.85, (x, y) => 1.24 - 0.28 * (x - 0.62) + 0.06 * y, 0.03),
+    );
     const g = new THREE.Group();
-    g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white));
-    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * 0.14 * p.cheek, -0.05 * p.cheek, -0.1 * p.cheek)));
+    g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white), mesh(s > 0 ? cap : mirrorX(cap), M.white));
+    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * 0.12 * p.cheek, -0.04 * p.cheek, -0.06 * p.cheek)));
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }
 

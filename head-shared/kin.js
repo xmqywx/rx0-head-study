@@ -32,7 +32,7 @@ export const raw = (d, k) => clamp01((d - STAGES[k][0]) / (STAGES[k][1] - STAGES
 // mechanism constants (units)
 export const HORN = {root: [0, 1.45, 0.95], tip: [0, 4.57, 1.55], split: 57, spread: 0.42, drop: 0.5, sink: 0.6};
 HORN.len = Math.hypot(HORN.tip[1] - HORN.root[1], HORN.tip[2] - HORN.root[2]);
-export const MASK = {slide: 0.38, back: 0.3, yaw: 0.35, drop: 0.12};
+export const MASK = {slide: 0.36, back: 0.45, yaw: 0.6, drop: 0.14};
 export const CROWN = {lift: 0.13, rise: 0.08};
 export const FRAME_RISE = 0.13; // the psycho-frame pushes out into the opened seams
 export const FIN = {rise: 0.36};
