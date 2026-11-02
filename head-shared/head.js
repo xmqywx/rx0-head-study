@@ -572,29 +572,35 @@ export function buildHead() {
   for (const s of [1, -1]) {
     const M2 = (geo) => (s > 0 ? geo : mirrorX(geo));
     const pod = new THREE.Group();
-    const poly = [[0.42, 0.52], [0.45, -0.42], [0.2, -0.6], [-0.62, -0.6], [-0.8, -0.4], [-0.8, 0.35], [-0.6, 0.55]];
-    pod.add(mesh(M2(geoOf((m) => prism(m, poly, 'x', 0.92, 1.26, 0.03))), M.white));
-    // raised rim: four bars round the outer face
-    const RIM = [[[0.44, 0.54], [-0.62, 0.56], [-0.62, 0.42], [0.44, 0.4]], [[0.46, -0.44], [0.2, -0.62], [-0.62, -0.62], [-0.62, -0.48], [0.18, -0.48], [0.32, -0.38]],
-      [[0.44, 0.54], [0.3, 0.4], [0.32, -0.38], [0.46, -0.44]], [[-0.62, 0.56], [-0.8, 0.36], [-0.8, -0.4], [-0.62, -0.62], [-0.62, -0.48], [-0.66, -0.36], [-0.66, 0.34], [-0.62, 0.42]]];
-    for (const r of RIM) pod.add(mesh(M2(geoOf((m) => prism(m, r, 'x', 1.2, 1.38, 0.025))), M.white));
-    // the window: a white divider and two grilles, recessed behind the rim
-    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.3, 0.4], [-0.62, 0.42], [-0.66, -0.36], [0.18, -0.48], [0.32, -0.38]], 'x', 1.2, 1.27, 0.005))), M.grey, false));
-    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.06, 0.4], [-0.08, 0.4], [-0.08, -0.46], [0.06, -0.46]], 'x', 1.2, 1.34, 0.015))), M.white));
-    for (const [z0, z1, y0, y1] of [[0.27, 0.1, 0.32, -0.3], [-0.14, -0.58, 0.32, -0.34]]) {
-      pod.add(mesh(M2(geoOf((m) => prism(m, [[z0, y0], [z1, y0], [z1, y1], [z0, y1]], 'x', 1.22, 1.29, 0.006))), M.lens, false));
-      for (let k = 1; k < 5; k++) {
-        const yy = y1 + ((y0 - y1) * k) / 5;
-        pod.add(mesh(M2(geoOf((m) => prism(m, [[z0 - 0.005, yy + 0.016], [z1 + 0.005, yy + 0.016], [z1 + 0.005, yy - 0.016], [z0 - 0.005, yy - 0.016]], 'x', 1.24, 1.31, 0.004))), M.grey, false));
+    // traced from the Unicorn sheet's side view (reference/grid/u-side-pod.png; the Codex pod sheet drew a different,
+    // slanted pod and lost): a deep box frame, a small front window and a big rear one with a cross bar and slats,
+    // raised rims round both windows, a chamfered lower back corner and a bracket under the front
+    const Z = (px) => (610 - px) / 100;
+    const Y = (q) => (590 - q) / 100;
+    const T = (pts) => pts.map(([a, b]) => [Z(a), Y(b)]);
+    const frame = T([[567, 555], [687, 547], [686, 615], [645, 630], [565, 627]]);
+    pod.add(mesh(M2(geoOf((m) => prism(m, T([[562, 548], [692, 540], [692, 618], [648, 636], [560, 632]]), 'x', 0.92, 1.2, 0.03))), M.white));
+    pod.add(mesh(M2(geoOf((m) => prism(m, frame, 'x', 1.15, 1.33, 0.035))), M.white));
+    const win = (x0, x1, y0, y1, slats, bar) => {
+      const w = T([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+      pod.add(mesh(M2(geoOf((m) => prism(m, w, 'x', 1.25, 1.334, 0.004))), M.lens, false));
+      // raised rim: four bars round the window
+      const r = 0.035;
+      const [[za, ya], [zb], , [, yb]] = w;
+      for (const q of [[[za + r, ya + r], [zb - r, ya + r], [zb - r, ya], [za + r, ya]], [[za + r, yb], [zb - r, yb], [zb - r, yb - r], [za + r, yb - r]], [[za + r, ya + r], [za, ya + r], [za, yb - r], [za + r, yb - r]], [[zb, ya + r], [zb - r, ya + r], [zb - r, yb - r], [zb, yb - r]]])
+        pod.add(mesh(M2(geoOf((m) => prism(m, q, 'x', 1.3, 1.375, 0.012))), M.white));
+      for (let k = 1; k <= slats; k++) {
+        const yy = ya + ((yb - ya) * k) / (slats + 1);
+        pod.add(mesh(M2(geoOf((m) => prism(m, [[za, yy + 0.012], [zb, yy + 0.012], [zb, yy - 0.012], [za, yy - 0.012]], 'x', 1.26, 1.31, 0.003))), M.grey, false));
       }
-    }
-    // a horizontal bar across the big window
-    pod.add(mesh(M2(geoOf((m) => prism(m, [[-0.12, 0.06], [-0.6, 0.06], [-0.6, -0.04], [-0.12, -0.04]], 'x', 1.24, 1.35, 0.012))), M.white));
-    // lower bracket: carries the pod down to the jaw
-    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.3, -0.58], [-0.1, -0.58], [-0.15, -1.25], [0.22, -1.3]], 'x', 0.84, 1.1, 0.025))), M.white));
-    // front grille
-    pod.add(mesh(M2(geoOf((m) => prism(m, [[1.0, 0.3], [1.24, 0.3], [1.24, -0.25], [1.0, -0.25]], 'z', 0.38, 0.465, 0.01))), M.lens, false));
-    pod.position.y = POD_UP; // the front sheet puts the pods higher than the side sheet; front wins
+      if (bar) pod.add(mesh(M2(geoOf((m) => prism(m, [[za, Y(588)], [zb, Y(588)], [zb, Y(594)], [za, Y(594)]], 'x', 1.26, 1.35, 0.008))), M.white));
+    };
+    win(577, 589, 566, 609, 4, false);
+    win(630, 671, 566, 616, 5, true);
+    // the little mark on the frame's top back corner
+    pod.add(mesh(M2(geoOf((m) => prism(m, T([[668, 556], [678, 556], [678, 560], [668, 560]]), 'x', 1.3, 1.336, 0.002))), M.lens, false));
+    // bracket under the front of the pod, down to the jaw
+    pod.add(mesh(M2(geoOf((m) => prism(m, T([[578, 628], [600, 628], [604, 660], [596, 684], [580, 684]]), 'x', 0.98, 1.2, 0.02))), M.white));
     add(pod, new V3(s * 1.6, 0.05, -0.1), (p, obj) => (obj.position.x += s * CROWN.spread * p.crown));
     if (s > 0) anchors.pod = {obj: pod, p: new V3(1.37, 0.0, -0.3)};
     // cooling duct inside the pod

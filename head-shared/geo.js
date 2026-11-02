@@ -368,3 +368,63 @@ export function prismSplit(m, poly, axis, near, far, bevel, cuts, {gap = 0.02, m
   });
   return pieces;
 }
+
+/**
+ * A plate whose outline is any polygon on the surface, given in surface coordinates [u (radians), y]. The outline is
+ * densified, shrunk by gap/2 (clearance to its neighbours) and again by `bevel` for the chamfer, triangulated and
+ * subdivided, and every point is laid on the surface and pushed out along the surface normal (off .. off + t), so the
+ * plate follows the shell without stair steps and stands proud of it. R converts radians to roughly metric units so the
+ * insets are even.
+ */
+export function surfPolyPlate(surf, polyUY, {t = 0.08, off = 0, gap = 0.024, bevel = 0.03, seg = 0.12, R = 1.0} = {}) {
+  let P = polyUY.map(([u, y]) => [u * R, y]);
+  if (area2(P) < 0) P.reverse();
+  const D = [];
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i];
+    const b = P[(i + 1) % P.length];
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / seg));
+    for (let k = 0; k < n; k++) D.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
+  }
+  const base = inset(D, gap / 2);
+  const top = inset(base, bevel);
+  const at = ([s, y], h) => {
+    const u = s / R;
+    return surf.S(u, y).addScaledVector(surf.normal(u, y), off + h);
+  };
+  const nrm = ([s, y]) => surf.normal(s / R, y);
+  const m = new Mesher();
+  let tris = THREE.ShapeUtils.triangulateShape(top.map((q) => new THREE.Vector2(q[0], q[1])), []).map((t3) => t3.map((i) => top[i]));
+  for (let pass = 0; pass < 6; pass++) {
+    const next = [];
+    let split = false;
+    for (const [a, b, c] of tris) {
+      const L = Math.max(Math.hypot(a[0] - b[0], a[1] - b[1]), Math.hypot(b[0] - c[0], b[1] - c[1]), Math.hypot(c[0] - a[0], c[1] - a[1]));
+      if (L <= seg * 1.3) {
+        next.push([a, b, c]);
+        continue;
+      }
+      split = true;
+      const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+      const ab = mid(a, b);
+      const bc = mid(b, c);
+      const ca = mid(c, a);
+      next.push([a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]);
+    }
+    tris = next;
+    if (!split) break;
+  }
+  for (const [a, b, c] of tris) m.tri(at(a, t), at(b, t), at(c, t), nrm(a));
+  const n = base.length;
+  const cen = base.reduce((acc, q) => [acc[0] + q[0] / n, acc[1] + q[1] / n], [0, 0]);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const N = nrm(base[i]);
+    const out = at(base[i], 0).add(at(base[j], 0)).multiplyScalar(0.5).sub(at(cen, 0));
+    out.addScaledVector(N, -out.dot(N)).normalize();
+    m.quad(at(top[i], t), at(top[j], t), at(base[j], t - bevel * 0.8), at(base[i], t - bevel * 0.8), out.clone().add(N));
+    m.quad(at(base[i], t - bevel * 0.8), at(base[j], t - bevel * 0.8), at(base[j], 0), at(base[i], 0), out);
+  }
+  const geo = m.geo();
+  return {geo, center: at(cen, 0), normal: nrm(cen)};
+}
