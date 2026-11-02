@@ -117,7 +117,7 @@ export function prism(m, poly, axis, near, far, bevel = 0.03, {mirror = false} =
  * The helmet surface. sections: [[y, halfWidth, zFront, zBack], ...] bottom to top. u: radians, 0 = front (+z),
  * +90° = the head's left (+x). Cross sections are superellipses (exponent p) so the shell reads boxy, not egg-like.
  */
-export function makeSurface(sections, p = 2.6, scale = 1) {
+export function makeSurface(sections, p = 2.6, scale = 1, facets = 0) {
   const ys = sections.map((s) => s[0]);
   const at = (y) => {
     let i = 0;
@@ -128,7 +128,7 @@ export function makeSurface(sections, p = 2.6, scale = 1) {
     return [lerp(a[1], b[1], t), lerp(a[2], b[2], t), lerp(a[3], b[3], t)];
   };
   const e = 2 / p;
-  const S = (u, y, out = new V3()) => {
+  const raw = (u, y, out) => {
     const [hw, zf, zb] = at(y);
     const s = Math.sin(u);
     const c = Math.cos(u);
@@ -136,6 +136,20 @@ export function makeSurface(sections, p = 2.6, scale = 1) {
     const hd = (zf - zb) / 2;
     return out.set(hw * scale * Math.sign(s) * Math.abs(s) ** e, y, zc + hd * scale * Math.sign(c) * Math.abs(c) ** e);
   };
+  // facets > 0: the cross-section is the polygon through `facets` points of the superellipse, so armor reads as
+  // flat panels meeting at creases instead of an egg
+  const step = facets ? (Math.PI * 2) / facets : 0;
+  const tA = new V3();
+  const tB = new V3();
+  const S = (u, y, out = new V3()) => {
+    if (!step) return raw(u, y, out);
+    const k = Math.floor(u / step);
+    const f = u / step - k;
+    raw(k * step, y, tA);
+    raw((k + 1) * step, y, tB);
+    return out.copy(tA).lerp(tB, f);
+  };
+  const corners = facets ? Array.from({length: facets * 2 + 1}, (_, i) => (i - facets) * (360 / facets)) : [];
   const CEN = new V3(0, 0.3, -0.15);
   const normal = (u, y) => {
     const du = 0.004;
@@ -147,7 +161,7 @@ export function makeSurface(sections, p = 2.6, scale = 1) {
     if (n.dot(S(u, y).sub(CEN)) < 0) n.negate();
     return n;
   };
-  return {S, normal, ys, at};
+  return {S, normal, ys, at, corners};
 }
 
 /**
@@ -185,7 +199,12 @@ export function shellPlate(surf, c, {t = 0.09, off = 0, gap = 0.025, bevel = 0.0
     const u = uAt(R, a, b);
     return surf.S(u, yy).addScaledVector(surf.normal(u, yy), off + h);
   };
+  // a samples: evenly spaced, plus every facet crease the plate's centre line crosses (so flat panels stay flat)
+  const uc0 = lerp(c.ub[0], c.ut[0], 0.5);
+  const uc1 = lerp(c.ub[1], c.ut[1], 0.5);
   const as = Array.from({length: NU + 1}, (_, i) => i / NU);
+  for (const cu of surf.corners || []) if (cu > uc0 + 1 && cu < uc1 - 1) as.push((cu - uc0) / (uc1 - uc0));
+  as.sort((p, q) => p - q);
   const G = (R, h) => bs.map((b) => as.map((a) => pt(R, a, b, h)));
   const top = G(topR, t);
   const rim = G(full, t - bevel * 0.8);
@@ -303,4 +322,49 @@ export function loftBody(surf, ys, nu = 20) {
     for (let j = 0; j < nu; j++) m.tri(c, row[j], row[(j + 1) % nu], new V3(0, s, 0));
   }
   return m.geo();
+}
+
+/** clip a polygon to the half-plane a*x + b*y <= c (Sutherland-Hodgman) */
+export function clipPoly(P, a, b, c) {
+  const out = [];
+  const inside = (p) => a * p[0] + b * p[1] <= c + 1e-9;
+  for (let i = 0; i < P.length; i++) {
+    const p = P[i];
+    const q = P[(i + 1) % P.length];
+    const ip = inside(p);
+    const iq = inside(q);
+    if (ip) out.push(p);
+    if (ip !== iq) {
+      const dp = a * p[0] + b * p[1] - c;
+      const dq = a * q[0] + b * q[1] - c;
+      const t = dp / (dp - dq);
+      out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+    }
+  }
+  return out;
+}
+
+/**
+ * A prism cut into facet panels along lines: cuts = [[a, b, c], ...] each splitting a*x + b*y = c. Every piece is its
+ * own chamfered prism with `gap` clearance, so creases read as panel lines and each piece can have its own planar
+ * far face: far(x, y, i) gets the piece index. Returns the pieces' polygons too.
+ */
+export function prismSplit(m, poly, axis, near, far, bevel, cuts, {gap = 0.02, mirror = false} = {}) {
+  let pieces = [poly.map((p) => [...p])];
+  for (const [a, b, c] of cuts) {
+    const n = Math.hypot(a, b);
+    const next = [];
+    for (const P of pieces) {
+      const lo = clipPoly(P, a, b, c - (gap / 2) * n);
+      const hi = clipPoly(P, -a, -b, -c - (gap / 2) * n);
+      if (lo.length >= 3) next.push(lo);
+      if (hi.length >= 3) next.push(hi);
+    }
+    pieces = next;
+  }
+  pieces.forEach((P, i) => {
+    const F = typeof far === 'number' ? () => far : (x, y) => far(x, y, P);
+    prism(m, P, axis, near, F, bevel, {mirror});
+  });
+  return pieces;
 }

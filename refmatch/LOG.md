@@ -14,3 +14,12 @@
 | r8 | = | .760/.791/.790 (.780) | measurement fix: destroy front box overlapped the side drawing (x1 520→455); crownR spreads 1.0, rear-lower armor flares 2.4×; fin hinge spread .42 (.62/.80 worse overall) |
 
 Open: destroy side view is ~20 % longer front-to-back than its own front view implies (sheet inconsistency, not fixed by one k); destroy front shows no neck collar (head hides it), the Unicorn sheet shows it wide.
+
+## Pass 2 — Unicorn Mode detail (user: "only 40 %", circled parts)
+| round | unicorn F/S/B (avg) | change |
+|---|---|---|
+| u3 | (.887) | shell → 16 flat facets; brow = prow of split facets (crease along the visor line, tip z 1.66); crown cap + crest + rear lip with vent; rear fin on a 2-facet back panel with slots; pod = body + raised rim + window, divider, 2 grilles, bar + lower bracket; cheek with jaw point; horn collars 1.13 |
+| u4 | (.868) | pods to the side sheet's height (POD_UP .28 → .08, front view loses), head underside slopes up to the back, neck column of panels on a stepped base, horn depth .32, darker ink lines |
+| u5 | .899/…/… (.882) | brow prow deepened to .62, back panel pulled in .06, crown cap seated on the shell as the top strip (was a floating lid) |
+
+Note: IoU went down from .911 on purpose in u4 — the side sheet's pod height and the visible neck were chosen over the front-sheet silhouette.

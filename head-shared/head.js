@@ -5,17 +5,17 @@
 // laid under every seam, the dual-eye sensor unit, three mask actuator rails, the horn hinge, vulcans, cooling ducts
 // in the ear pods and a neck ball joint. update({d, explode, armor, time}) poses all of it from kin.js.
 import * as THREE from 'three';
-import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, shellPlate, sweep} from './geo.js';
+import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, prismSplit, shellPlate, sweep} from './geo.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 
 const V3 = THREE.Vector3;
-const POD_UP = 0.28;
+const POD_UP = 0.08; // the side sheet sets the pod low on the head, the front sheet higher; the side wins (it is the view people read)
 
 // helmet surface, read off the Unicorn sheet: [y, half width, front z, back z]
 const SHELL = [
-  [-1.15, 0.68, 0.85, -0.98],
-  [-0.55, 0.92, 1.15, -1.18],
+  [-1.15, 0.68, 0.85, -0.85],
+  [-0.55, 0.92, 1.15, -1.1],
   [0.3, 1.07, 1.35, -1.45],
   [0.95, 0.9, 1.34, -1.3],
   [1.4, 0.66, 1.02, -1.05],
@@ -25,8 +25,8 @@ const SHELL = [
 ];
 // the skull under it, pulled in, with the face recessed for the faceplate and eye unit
 const CORE = [
-  [-1.2, 0.58, 0.62, -0.9],
-  [-0.55, 0.8, 0.8, -1.18],
+  [-1.2, 0.56, 0.62, -0.74],
+  [-0.55, 0.8, 0.8, -0.98],
   [0.3, 0.95, 0.92, -1.37],
   [0.95, 0.86, 1.16, -1.18],
   [1.4, 0.66, 0.88, -0.78],
@@ -43,9 +43,9 @@ const PLATES = [
   {k: 'forehead', ub: [18, 56], ut: [12, 58], yb: [0.98, 0.98], yt: [1.18, 1.5], lift: 0.6, up: 0.6, red: 'b'},
   {k: 'temple', side: 0.9, ub: [56, 118], ut: [58, 118], yb: [0.78, 0.78], yt: [1.5, 1.42], lift: 0.8, up: 0.5, red: 'lb', off: 0.03, t: 0.13},
   {k: 'rearUp', side: 0.9, ub: [118, 166], ut: [118, 166], y: [0.45, 1.42], lift: 0.8, up: 0.4, red: 'lbr', off: 0.025, t: 0.11},
-  {k: 'sideMid', side: 1, ub: [62, 118], ut: [56, 118], y: [-0.6, 0.78], lift: 0.35, up: 0, red: ''},
-  {k: 'rearLow', side: 2.4, ub: [118, 166], ut: [118, 166], y: [-1.1, 0.45], lift: 0.6, up: 0, red: 'lr', off: -0.01},
-  {k: 'sideLow', side: 1, ub: [68, 118], ut: [62, 118], y: [-1.12, -0.6], lift: 0.3, up: 0, red: ''},
+  {k: 'sideMid', side: 1, ub: [62, 118], ut: [56, 118], y: [-0.5, 0.78], lift: 0.35, up: 0, red: ''},
+  {k: 'rearLow', side: 2.4, ub: [118, 166], ut: [118, 166], yb: [-0.86, -0.9], yt: [0.45, 0.45], lift: 0.6, up: 0, red: 'lr', off: -0.01},
+  {k: 'sideLow', side: 1, ub: [68, 118], ut: [62, 118], yb: [-1.05, -0.86], yt: [-0.5, -0.5], lift: 0.3, up: 0, red: ''},
 ];
 function materials() {
   const std = (o) => new THREE.MeshStandardMaterial({roughness: 0.5, metalness: 0, envMapIntensity: 0.6, ...o});
@@ -60,7 +60,7 @@ function materials() {
     red: std({color: '#7c1f1a', emissive: '#ff1a0a', emissiveIntensity: 0, roughness: 0.3, metalness: 0.15, envMapIntensity: 0.9}),
     chin: std({color: '#c8262a', roughness: 0.4}),
     green: std({color: '#0f2016', emissive: '#39ff6e', emissiveIntensity: 0, roughness: 0.2}),
-    ink: new THREE.LineBasicMaterial({color: '#41474e', transparent: true, opacity: 0.55}),
+    ink: new THREE.LineBasicMaterial({color: '#2a2f35', transparent: true, opacity: 0.8}),
   };
 }
 
@@ -68,7 +68,7 @@ export function buildHead() {
   const M = materials();
   const ARMOR = [M.white, M.grey, M.visor];
   const root = new THREE.Group();
-  const surf = makeSurface(SHELL, 2.6);
+  const surf = makeSurface(SHELL, 2.6, 1, 16); // 16 flat facets around: panels, not an egg
   const core = makeSurface(CORE, 2.6);
   const parts = []; // {obj, home: V3, ex: V3 (explode offset), pose(p, obj)}
   const anchors = {};
@@ -248,68 +248,99 @@ export function buildHead() {
     return part;
   };
   for (const c of PLATES) for (const s of [1, -1]) mkPlate(c, s);
-  mkPlate({k: 'back', ub: [166, 194], ut: [166, 194], y: [-1.1, 1.42], lift: 0.5, up: 0.2, off: 0.04, t: 0.1}, 1);
-  anchors.crown = {obj: plateParts[0].part.obj, p: surf.S(40 * D2R, 1.78).add(new V3(0, 0.05, 0))};
+  mkPlate({k: 'back', ub: [166, 194], ut: [166, 194], y: [-0.9, 1.42], lift: 0.5, up: 0.2, off: 0.04, t: 0.1}, 1);
 
-  // crown ridge: over the top from the forehead to the back
+  // crown cap: a separate faceted cap laid over the crown, overhanging the back of the head and ending in a raised
+  // lip with a vent slot (the sheet's "helmet crown"); a narrow crest runs along its spine
   {
-    const path = [];
-    const up = [];
-    for (const y of [1.36, 1.6, 1.8, 1.95]) {
-      path.push(surf.S(0, y).addScaledVector(surf.normal(0, y), 0.02));
-      up.push(surf.normal(0, y));
-    }
-    for (const z of [0.15, -0.2]) {
-      path.push(new V3(0, 1.94, z));
-      up.push(new V3(0, 1, 0));
-    }
-    for (const y of [1.95, 1.8, 1.6, 1.42]) {
-      path.push(surf.S(Math.PI, y).addScaledVector(surf.normal(Math.PI, y), 0.02));
-      up.push(surf.normal(Math.PI, y));
-    }
-    const n = path.length;
-    const geo = geoOf((m) =>
-      sweep(m, path, up, (i) => {
-        const w = 0.17 + 0.07 * (i / (n - 1));
-        return [[-w, -0.06], [w, -0.06], [w, 0.05], [w * 0.7, 0.1], [-w * 0.7, 0.1], [-w, 0.05]];
-      }),
-    );
+    // seated on the shell (not floating): the top view's centre strip, wide at the back where the lip rises
+    const P = [[0.5, 1.84], [0.2, 1.93], [-0.3, 1.92], [-0.8, 1.74], [-1.18, 1.52], [-1.4, 1.38]];
+    const Wd = [0.26, 0.3, 0.32, 0.33, 0.32, 0.28];
+    const path = P.map(([z, y]) => new V3(0, y, z));
+    const up = P.map((_, i) => {
+      const a0 = P[Math.max(0, i - 1)];
+      const a1 = P[Math.min(P.length - 1, i + 1)];
+      return new V3(0, a0[0] - a1[0], a1[1] - a0[1]).normalize().negate().multiplyScalar(-1);
+    });
+    for (const u of up) if (u.y < 0) u.negate();
+    const cap = geoOf((m) => sweep(m, path, up, (i) => {
+      const w = Wd[i];
+      return [[-w, -0.16], [w, -0.16], [w, 0.03], [w * 0.7, 0.11], [-w * 0.7, 0.11], [-w, 0.03]];
+    }));
+    const crest = geoOf((m) => sweep(m, path.slice(2, 5), up.slice(2, 5), () => [[-0.17, 0.08], [0.17, 0.08], [0.17, 0.16], [0.12, 0.2], [-0.12, 0.2], [-0.17, 0.16]]));
+    const lip = geoOf((m) => prism(m, [[-1.08, 1.56], [-1.44, 1.36], [-1.5, 1.48], [-1.2, 1.68]], 'x', -0.24, 0.24, 0.025));
+    const vent = geoOf((m) => prism(m, [[-1.24, 1.55], [-1.42, 1.44], [-1.44, 1.5], [-1.26, 1.6]], 'x', -0.13, 0.13, 0.008));
     const g = new THREE.Group();
-    g.add(mesh(geo, M.white));
+    g.add(mesh(cap, M.white), mesh(crest, M.white), mesh(lip, M.white));
+    const v = mesh(vent, M.lens, false);
+    v.scale.set(1.05, 1, 1);
+    v.position.set(0, 0.012, -0.005);
+    g.add(v);
     add(g, new V3(0, 1.3, 0), (p, obj) => obj.position.add(new V3(0, (CROWN.rise + 0.05) * p.crown, 0)));
+    anchors.crown = {obj: g, p: new V3(0.35, 1.95, -0.3)};
   }
 
-  // ---------------------------------------------------------------- rear fin
+  // ---------------------------------------------------------------- rear fin on its back panel
   {
-    const geo = geoOf((m) => prism(m, [[-1.25, 1.22], [-1.45, 1.15], [-1.53, 0.8], [-1.55, 0.3], [-1.4, 0.2]], 'x', -0.13, 0.13, 0.03));
+    // two facets, creased at y = .35: the upper leans in toward the crown, the lower tucks in toward the neck
+    const pf = (x, y) => (y >= 0.35 ? -1.6 + 0.25 * (y - 0.35) : -1.6 + 0.33 * (0.35 - y));
+    const panelPoly = [[-0.42, 1.0], [0.42, 1.0], [0.47, -0.2], [0.38, -0.62], [-0.38, -0.62], [-0.47, -0.2]];
+    const panel = geoOf((m) => prismSplit(m, panelPoly, 'z', (x, y) => pf(x, y) + 0.24, (x, y, P) => pf(x, P.reduce((s, q) => s + q[1], 0) / P.length >= 0.35 ? Math.max(y, 0.35) : Math.min(y, 0.35)), 0.03, [[0, 1, 0.35]], {gap: 0.02}));
+    const finPoly = [[-0.13, 1.28], [0.13, 1.28], [0.15, -0.32], [0.09, -0.44], [-0.09, -0.44], [-0.15, -0.32]];
+    const fin = geoOf((m) => prismSplit(m, finPoly, 'z', (x, y) => pf(x, y) + 0.05, (x, y, P) => pf(x, P.reduce((s, q) => s + q[1], 0) / P.length >= 0.35 ? Math.max(y, 0.35) : Math.min(y, 0.35)) - 0.13, 0.03, [[0, 1, 0.35]], {gap: 0.012}));
+    const slot = geoOf((m) => prism(m, [[-0.06, -0.22], [0.06, -0.22], [0.06, -0.3], [-0.06, -0.3]], 'z', -1.6, (x, y) => pf(x, y) - 0.14, 0.006));
+    const pg = new THREE.Group();
+    pg.add(mesh(panel, M.white));
+    // two dark slots either side of the panel top
+    for (const s of [1, -1]) {
+      const sl = mesh(geoOf((m) => prism(m, [[0.52, 0.62], [0.66, 0.62], [0.66, 0.5], [0.52, 0.5]], 'z', -1.45, -1.58, 0.006)), M.lens, false);
+      if (s < 0) sl.scale.x = -1;
+      pg.add(sl);
+    }
+    add(pg, new V3(0, 0.1, -0.9), (p, obj) => obj.position.add(new V3(0, 0, -0.05 * p.fin)));
     const g = new THREE.Group();
-    g.add(mesh(geo, M.white));
-    const sensor = mesh(geoOf((m) => prism(m, [[-1.53, 0.62], [-1.53, 0.48], [-1.565, 0.5], [-1.565, 0.6]], 'x', -0.07, 0.07, 0)), M.lens, false);
-    g.add(sensor);
+    g.add(mesh(fin, M.white), mesh(slot, M.lens, false));
     add(g, new V3(0, 0.3, -1.3), (p, obj) => obj.position.add(new V3(0, FIN.rise * p.fin, -0.08 * p.fin)));
-    anchors.fin = {obj: g, p: new V3(0, 1.4, -1.75)};
+    anchors.fin = {obj: g, p: new V3(0, 0.9, -1.72)};
   }
 
   // ---------------------------------------------------------------- brow and forehead block (main camera, horn root)
-  const browFar = (x, y) => 1.75 - 0.4 * x - 0.45 * (y - 0.3);
+  // the brow is a prow: two facets meeting at a crease that runs parallel to the visor edge (tip 1.66 forward, as the
+  // side sheet shows), the outer half folding back again at x = .55
+  const crease = (x) => 0.39 + 0.39 * x;
+  const browFar = (x, y) => {
+    const d = y - crease(x);
+    return 1.66 - 0.35 * x - 0.15 * Math.max(0, x - 0.55) - (d < 0 ? -1.0 * d : 0.55 * d);
+  };
+  const side = (P) => P.reduce((s, q) => s + q[1] - crease(q[0]), 0) / P.length; // which side of the crease a piece is on
+  const pieceFar = (x, y, P) => {
+    const below = side(P) < 0;
+    const outer = P.reduce((s, q) => s + q[0], 0) / P.length > 0.55;
+    const xx = outer ? Math.max(x, 0.55) : Math.min(x, 0.55);
+    const d = y - crease(x);
+    return 1.66 - 0.35 * x - 0.15 * Math.max(0, xx - 0.55) - (below ? -1.0 * Math.min(0, d) * 1 : 0.55 * Math.max(0, d)) - (below ? 0 : 0);
+  };
   {
-    // the eyebrow: a narrow blade along the top of the eyes, it stays put
+    // the eyebrow: the lower facet, along the top of the eyes; it stays put
     const blade = geoOf((m) =>
-      prism(m, [[0.17, 0.14], [0.85, 0.47], [1.0, 0.56], [0.96, 0.69], [0.3, 0.44], [0.17, 0.38]], 'z', (x, y) => browFar(x, y) - 0.3, (x, y) => browFar(x, y) + 0.02, 0.03, {mirror: true}),
+      prismSplit(m, [[0.17, 0.14], [0.85, 0.47], [1.0, 0.56], [1.0, 0.765], [0.17, 0.44]], 'z', (x, y) => browFar(x, y) - 0.62, (x, y, P) => pieceFar(x, y, P) + 0.01, 0.025, [[1, 0, 0.55]], {mirror: true}),
     );
-    // the upper brow: lifts and slides back in NT-D, opening a red seam above the blade
+    // the upper facet: lifts and slides back in NT-D, opening a red seam along the crease
     const upper = geoOf((m) =>
-      prism(m, [[0.17, 0.4], [0.3, 0.46], [0.96, 0.71], [1.0, 0.8], [0.62, 1.1], [0.17, 0.98]], 'z', (x, y) => browFar(x, y) - 0.3, browFar, 0.035, {mirror: true}),
+      prismSplit(m, [[0.17, 0.475], [1.0, 0.8], [1.0, 0.87], [0.62, 1.12], [0.17, 1.0]], 'z', (x, y) => browFar(x, y) - 0.62, pieceFar, 0.03, [[1, 0, 0.55]], {mirror: true}),
     );
-    const seam = geoOf((m) => prism(m, [[0.19, 0.35], [0.95, 0.62], [0.98, 0.78], [0.21, 0.52]], 'z', 0.95, (x, y) => browFar(x, y) - 0.07, 0.015, {mirror: true}));
+    const seam = geoOf((m) => prism(m, [[0.19, 0.4], [0.98, 0.72], [0.98, 0.84], [0.21, 0.52]], 'z', 1.0, (x, y) => browFar(x, y) - 0.08, 0.015, {mirror: true}));
     const g = new THREE.Group();
     g.add(mesh(blade, M.white), mesh(seam, M.red, false));
     const ug = new THREE.Group();
     ug.add(mesh(upper, M.white));
     add(ug, new V3(0, 0.45, 0.9), (p, obj) => obj.position.add(new V3(0, 0.11 * p.crown, -0.06 * p.crown)));
-    // vulcan muzzles in the brow corners
     add(g, new V3(0, 0.15, 1.0), (p, obj) => obj.position.add(new V3(0, 0, 0.04 * p.crown)));
-    anchors.brow = {obj: g, p: new V3(0.55, 0.85, 1.42)};
+    anchors.brow = {obj: g, p: new V3(0.55, 0.6, 1.5)};
+    // the horn's root housing: a block behind the horn base, on the crown's front
+    const hb = new THREE.Group();
+    hb.add(mesh(geoOf((m) => prism(m, [[0.86, 1.48], [0.5, 1.52], [0.42, 1.95], [0.6, 2.06], [0.82, 1.86]], 'x', -0.2, 0.2, 0.03)), M.white));
+    add(hb, new V3(0, 1.2, 0.2));
   }
   const block = new THREE.Group();
   {
@@ -336,7 +367,7 @@ export function buildHead() {
     horn.position.set(...HORN.root);
     horn.quaternion.setFromUnitVectors(new V3(0, 1, 0), dir);
     const W = (f) => 0.27 * (1 - f) ** 0.75 + 0.006; // the Unicorn sheet's horn wins over the Destroy sheet's wider fins
-    const Dp = (f) => 0.25 * (1 - f) + 0.006;
+    const Dp = (f) => 0.32 * (1 - f) ** 0.9 + 0.006;
     const SEG = [0, 0.24, 0.46, 0.64, 0.8, 1];
     const half = (s) => {
       const m = new Mesher();
@@ -348,7 +379,7 @@ export function buildHead() {
         const up = fs.map(() => new V3(0, 0, 1));
         sweep(m, path, up, (j) => {
           const f = fs[j];
-          const k = j === 0 ? 1.0 : j === 1 ? 1.07 : 1;
+          const k = j === 0 ? 1.0 : j === 1 ? 1.13 : 1;
           const w = W(f) * k;
           const d = Dp(f) * k;
           return [[0, d], [s * w * 0.55, d * 0.5], [s * w, 0], [s * w * 0.55, -d * 0.5], [0, -d]];
@@ -485,11 +516,12 @@ export function buildHead() {
 
   // ---------------------------------------------------------------- cheek guards
   for (const s of [1, -1]) {
+    // the side plate: its lower half folds inward toward a jaw point that reaches down and forward
     const geo = geoOf((m) =>
-      prism(m, [[1.26, -0.02], [1.3, -0.42], [1.12, -0.8], [0.62, -0.86], [0.48, -0.5], [0.6, -0.02]], 'x', 0.7, (a) => 0.99 - 0.13 * (a - 0.5), 0.035),
+      prismSplit(m, [[1.26, -0.02], [1.32, -0.45], [1.18, -1.18], [1.0, -1.1], [0.62, -0.82], [0.48, -0.5], [0.6, -0.02]], 'x', 0.66, (a, b, P) => 0.99 - 0.13 * (a - 0.5) - (P.reduce((s, q) => s + q[1], 0) / P.length < -0.5 ? 0.22 * (-Math.min(b, -0.5) - 0.5) : 0), 0.03, [[0, 1, -0.5]], {gap: 0.018}),
     );
     const cap = geoOf((m) =>
-      prism(m, [[0.7, -0.3], [0.98, -0.16], [1.0, -0.55], [0.8, -0.98], [0.6, -0.95], [0.62, -0.6]], 'z', 0.85, (x, y) => 1.24 - 0.28 * (x - 0.62) + 0.06 * y, 0.03),
+      prism(m, [[0.7, -0.3], [0.92, -0.16], [0.94, -0.55], [0.82, -1.05], [0.66, -1.0], [0.66, -0.6]], 'z', 0.85, (x, y) => 1.24 - 0.28 * (x - 0.62) + 0.06 * y, 0.03),
     );
     const g = new THREE.Group();
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white), mesh(s > 0 ? cap : mirrorX(cap), M.white));
@@ -502,15 +534,25 @@ export function buildHead() {
     const M2 = (geo) => (s > 0 ? geo : mirrorX(geo));
     const pod = new THREE.Group();
     const poly = [[0.42, 0.52], [0.45, -0.42], [0.2, -0.6], [-0.62, -0.6], [-0.8, -0.4], [-0.8, 0.35], [-0.6, 0.55]];
-    pod.add(mesh(M2(geoOf((m) => prism(m, poly, 'x', 0.92, 1.36, 0.04))), M.white));
-    // side grilles: dark windows with slats
-    for (const [z0, z1, y0, y1] of [[0.28, 0.06, 0.32, -0.3], [-0.18, -0.6, 0.3, -0.12]]) {
-      pod.add(mesh(M2(geoOf((m) => prism(m, [[z0, y0], [z1, y0], [z1, y1], [z0, y1]], 'x', 1.3, 1.366, 0.008))), M.lens, false));
-      for (let k = 1; k < 4; k++) {
-        const yy = y1 + ((y0 - y1) * k) / 4;
-        pod.add(mesh(M2(geoOf((m) => prism(m, [[z0 - 0.01, yy + 0.018], [z1 + 0.01, yy + 0.018], [z1 + 0.01, yy - 0.018], [z0 - 0.01, yy - 0.018]], 'x', 1.33, 1.37, 0.005))), M.grey, false));
+    pod.add(mesh(M2(geoOf((m) => prism(m, poly, 'x', 0.92, 1.26, 0.03))), M.white));
+    // raised rim: four bars round the outer face
+    const RIM = [[[0.44, 0.54], [-0.62, 0.56], [-0.62, 0.42], [0.44, 0.4]], [[0.46, -0.44], [0.2, -0.62], [-0.62, -0.62], [-0.62, -0.48], [0.18, -0.48], [0.32, -0.38]],
+      [[0.44, 0.54], [0.3, 0.4], [0.32, -0.38], [0.46, -0.44]], [[-0.62, 0.56], [-0.8, 0.36], [-0.8, -0.4], [-0.62, -0.62], [-0.62, -0.48], [-0.66, -0.36], [-0.66, 0.34], [-0.62, 0.42]]];
+    for (const r of RIM) pod.add(mesh(M2(geoOf((m) => prism(m, r, 'x', 1.2, 1.38, 0.025))), M.white));
+    // the window: a white divider and two grilles, recessed behind the rim
+    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.3, 0.4], [-0.62, 0.42], [-0.66, -0.36], [0.18, -0.48], [0.32, -0.38]], 'x', 1.2, 1.27, 0.005))), M.grey, false));
+    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.06, 0.4], [-0.08, 0.4], [-0.08, -0.46], [0.06, -0.46]], 'x', 1.2, 1.34, 0.015))), M.white));
+    for (const [z0, z1, y0, y1] of [[0.27, 0.1, 0.32, -0.3], [-0.14, -0.58, 0.32, -0.34]]) {
+      pod.add(mesh(M2(geoOf((m) => prism(m, [[z0, y0], [z1, y0], [z1, y1], [z0, y1]], 'x', 1.22, 1.29, 0.006))), M.lens, false));
+      for (let k = 1; k < 5; k++) {
+        const yy = y1 + ((y0 - y1) * k) / 5;
+        pod.add(mesh(M2(geoOf((m) => prism(m, [[z0 - 0.005, yy + 0.016], [z1 + 0.005, yy + 0.016], [z1 + 0.005, yy - 0.016], [z0 - 0.005, yy - 0.016]], 'x', 1.24, 1.31, 0.004))), M.grey, false));
       }
     }
+    // a horizontal bar across the big window
+    pod.add(mesh(M2(geoOf((m) => prism(m, [[-0.12, 0.06], [-0.6, 0.06], [-0.6, -0.04], [-0.12, -0.04]], 'x', 1.24, 1.35, 0.012))), M.white));
+    // lower bracket: carries the pod down to the jaw
+    pod.add(mesh(M2(geoOf((m) => prism(m, [[0.3, -0.58], [-0.1, -0.58], [-0.15, -1.25], [0.22, -1.3]], 'x', 0.84, 1.1, 0.025))), M.white));
     // front grille
     pod.add(mesh(M2(geoOf((m) => prism(m, [[1.0, 0.3], [1.24, 0.3], [1.24, -0.25], [1.0, -0.25]], 'z', 0.38, 0.465, 0.01))), M.lens, false));
     pod.position.y = POD_UP; // the front sheet puts the pods higher than the side sheet; front wins
@@ -548,9 +590,10 @@ export function buildHead() {
   const oct = (hw, z0, z1, c) => [[-hw + c, z0], [hw - c, z0], [hw, z0 + c], [hw, z1 - c], [hw - c, z1], [-hw + c, z1], [-hw, z1 - c], [-hw, z0 + c]];
   {
     const g = new THREE.Group();
-    g.add(mesh(geoOf((m) => prism(m, oct(0.6, -0.72, 0.5, 0.18), 'y', -1.46, -0.72, 0.03)), M.frame, false));
-    g.add(mesh(geoOf((m) => prism(m, oct(0.82, -0.82, 0.7, 0.22), 'y', -1.46, -1.2, 0.03)), M.frameMid, false));
-    g.add(mesh(geoOf((m) => prism(m, oct(0.98, -0.92, 0.88, 0.26), 'y', -1.72, -1.46, 0.04)), M.grey));
+    // a tall neck column of panels (the sheet shows it plainly under the back half of the head), on a stepped base
+    g.add(mesh(geoOf((m) => prismSplit(m, oct(0.62, -0.72, 0.62, 0.2), 'y', -1.5, -0.62, 0.03, [[1, 0, 0.3], [1, 0, -0.3], [0, 1, -0.05]], {gap: 0.025})), M.frame, false));
+    g.add(mesh(geoOf((m) => prism(m, oct(0.82, -0.84, 0.86, 0.24), 'y', -1.58, -1.44, 0.03)), M.frameMid, false));
+    g.add(mesh(geoOf((m) => prism(m, oct(0.98, -0.94, 1.0, 0.3), 'y', -1.74, -1.58, 0.04)), M.grey));
     add(g, new V3(0, -1.7, 0));
     anchors.collar = {obj: g, p: new V3(0.9, -1.55, 0.6)};
     const ball = new THREE.Group();
@@ -578,7 +621,7 @@ export function buildHead() {
       m.depthWrite = a > 0.5;
       if (was !== a < 1) m.needsUpdate = true;
     }
-    M.ink.opacity = 0.55 * a;
+    M.ink.opacity = 0.8 * a;
   };
 
   const tmp = new V3();
