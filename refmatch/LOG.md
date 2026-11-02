@@ -31,3 +31,9 @@ Note: IoU went down from .911 on purpose in u4 — the side sheet's pod height a
 | h2 | .939/.929/.940 (.936) | — | blade 6 % slimmer (sheet outline stroke), smaller collars, housing front follows the ramp |
 | h3 | .950/.928/.953 (.944) | .885 / .768 | narrow core, pointed lugs |
 | h4 ✗ | (.942) | .878 / .736 | root raised to the crown surface (1.45→1.8) to show the housing: still hidden, head worse — reverted |
+| e2 | — | .889 / .762 | ear pod traced from the Unicorn side view (the Codex pod sheet drew a different pod) |
+| s1 ✗ | — | .884 / .773 | all ~200 segmented panels laid along the shell normal (surfPolyPlate): twisted near the facet creases — reverted |
+| m1 | — | .897 / .760 | 9 side plates hand-traced from the segmented side view, flat facets over a sunk under-shell |
+| m2 | — | .895 / .758 | cheek guard traced: main plate under the pod + front piece folding in to the jaw point |
+
+Lesson: three automatic panel-transfer attempts failed (stamp grid, planar fit per panel, surface-normal plates). Hand-tracing a part from the sheet works (horn .944 alone, pod, side plates).

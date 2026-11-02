@@ -235,7 +235,7 @@ export function buildHead() {
   const plateParts = [];
   const mkPlate = (c, side, extra = {}) => {
     const mirror = side < 0;
-    const {geo, center, normal} = shellPlate(surf, c, {t: c.t ?? 0.09, off: c.off ?? 0, gap: 0.028, bevel: 0.035, mirror});
+    const {geo, center, normal} = shellPlate(surf, c, {t: c.t ?? 0.09, off: (c.off ?? 0) - 0.04, gap: 0.028, bevel: 0.035, mirror});
     const o = mesh(geo, M.white);
     const g = new THREE.Group();
     g.add(o);
@@ -249,6 +249,82 @@ export function buildHead() {
   };
   for (const c of PLATES) for (const s of [1, -1]) mkPlate(c, s);
   mkPlate({k: 'back', ub: [166, 194], ut: [166, 194], y: [-0.9, 1.42], lift: 0.5, up: 0.2, off: 0.04, t: 0.1}, 1);
+
+  // ---------------------------------------------------------------- side armor, traced plate by plate
+  // Outlines hand-traced from the side view of the colour-segmented Unicorn sheet (reference/grid/seg-side.png,
+  // sheet px), each a flat plate: its outer face is the plane that best fits the shell under it, raised to clear the
+  // shell, plus a standing height; mirrored for the right side. They lie over the PLATES layer (now the under-shell).
+  {
+    const tv = new V3();
+    const shellX = (z, y) => {
+      let lo = 0.02;
+      let hi = Math.PI - 0.02;
+      for (let k = 0; k < 28; k++) {
+        const mid = (lo + hi) / 2;
+        if (surf.S(mid, y, tv).z > z) lo = mid;
+        else hi = mid;
+      }
+      return surf.S((lo + hi) / 2, y, tv).x;
+    };
+    const Zp = (px) => (610 - px) / 100;
+    const Yp = (q) => (590 - q) / 100;
+    const SIDE = [
+      // [name, sheet px outline, standing height]
+      ['crown', [[532, 462], [580, 415], [650, 400], [675, 407], [660, 437], [675, 450], [640, 465], [595, 482], [550, 495]], 0.12],
+      ['crownRear', [[662, 438], [676, 406], [722, 430], [714, 450], [676, 450]], 0.1],
+      ['rearUpper', [[640, 466], [676, 451], [716, 452], [728, 497], [641, 500]], 0.09],
+      ['temple', [[503, 565], [518, 533], [550, 503], [597, 482], [597, 500], [580, 535], [548, 553]], 0.1],
+      ['midBlue', [[597, 483], [640, 467], [640, 500], [622, 510], [598, 518]], 0.07],
+      ['aboveEar', [[620, 508], [748, 498], [758, 528], [668, 532], [622, 536]], 0.1],
+      ['rearMid', [[660, 532], [748, 530], [730, 570], [700, 575], [662, 566]], 0.08],
+      ['rearLow', [[668, 570], [730, 572], [745, 588], [722, 655], [690, 672], [640, 672], [640, 640], [668, 615]], 0.09],
+      ['rearEdge', [[748, 530], [760, 532], [765, 575], [742, 660], [722, 660], [744, 588], [736, 572]], 0.08],
+    ];
+    const inPoly = (P, a, b) => {
+      let ins = false;
+      for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+        const [xi, yi] = P[i];
+        const [xj, yj] = P[j];
+        if (yi > b !== yj > b && a < ((xj - xi) * (b - yi)) / (yj - yi) + xi) ins = !ins;
+      }
+      return ins;
+    };
+    for (const [, pts, h] of SIDE) {
+      const P = pts.map(([a, b]) => [Zp(a), Yp(b)]);
+      const xs = P.map((q) => q[0]);
+      const ys = P.map((q) => q[1]);
+      const S = [...P];
+      for (let i = 1; i < 8; i++)
+        for (let j = 1; j < 8; j++) {
+          const a = Math.min(...xs) + ((Math.max(...xs) - Math.min(...xs)) * i) / 8;
+          const b = Math.min(...ys) + ((Math.max(...ys) - Math.min(...ys)) * j) / 8;
+          if (inPoly(P, a, b)) S.push([a, b]);
+        }
+      const D = S.map(([a, b]) => shellX(a, b));
+      let [saa, sab, sbb, sa, sb, sn, sad, sbd, sd] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+      S.forEach(([a, b], i) => {
+        const d = D[i];
+        saa += a * a; sab += a * b; sbb += b * b; sa += a; sb += b; sn += 1; sad += a * d; sbd += b * d; sd += d;
+      });
+      const r = new V3(sad, sbd, sd).applyMatrix3(new THREE.Matrix3().set(saa, sab, sa, sab, sbb, sb, sa, sb, sn).invert());
+      let lift = 0;
+      S.forEach(([a, b], i) => (lift = Math.max(lift, D[i] - (r.x * a + r.y * b + r.z))));
+      const far = (a, b) => r.x * a + r.y * b + r.z + lift + h;
+      const geo = geoOf((m) => prism(m, P, 'x', (a, b) => far(a, b) - h - 0.12, far, 0.035));
+      const cy = ys.reduce((q, v) => q + v, 0) / ys.length;
+      const nn = new V3(1, -r.y * 0.5, -r.x * 0.5).normalize();
+      for (const s of [1, -1]) {
+        const g = new THREE.Group();
+        g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white));
+        const ns = nn.clone();
+        ns.x *= s;
+        add(g, ns.clone().multiplyScalar(1.1).add(new V3(0, 0.2, 0)), (p, obj) => {
+          const k = p.crown;
+          obj.position.addScaledVector(ns, CROWN.lift * k).add(new V3(s * CROWN.spread * k, CROWN.rise * k * Math.max(0, (cy - 0.6) / 1.4), 0));
+        });
+      }
+    }
+  }
 
   // crown cap: a separate faceted cap laid over the crown, overhanging the back of the head and ending in a raised
   // lip with a vent slot (the sheet's "helmet crown"); a narrow crest runs along its spine
@@ -555,9 +631,22 @@ export function buildHead() {
 
   // ---------------------------------------------------------------- cheek guards
   for (const s of [1, -1]) {
-    // the side plate: its lower half folds inward toward a jaw point that reaches down and forward
+    // the side plate, traced from the segmented sheet's side view: a main plate reaching back under the pod and a
+    // front piece that folds inward along a crease, down to the jaw point
     const geo = geoOf((m) =>
-      prismSplit(m, [[1.26, -0.02], [1.32, -0.45], [1.18, -1.18], [1.0, -1.1], [0.62, -0.82], [0.48, -0.5], [0.6, -0.02]], 'x', 0.66, (a, b, P) => 0.99 - 0.13 * (a - 0.5) - (P.reduce((s, q) => s + q[1], 0) / P.length < -0.5 ? 0.22 * (-Math.min(b, -0.5) - 0.5) : 0), 0.03, [[0, 1, -0.5]], {gap: 0.018}),
+      prismSplit(
+        m,
+        [[1.33, -0.12], [1.1, 0.1], [0.88, 0.08], [0.48, 0.25], [0.3, 0.25], [0.35, -0.4], [0.6, -0.6], [0.8, -0.9], [1.13, -0.9], [1.2, -0.78]],
+        'x',
+        0.62,
+        (a, b, P) => {
+          const front = P.reduce((q, v) => q + v[0], 0) / P.length > 0.95;
+          return 1.0 - 0.13 * (a - 0.5) - (front ? 0.25 * Math.max(0, a - 0.95) : 0);
+        },
+        0.03,
+        [[0.98, 0.1, 0.939]],
+        {gap: 0.02},
+      ),
     );
     const cap = geoOf((m) =>
       prism(m, [[0.7, -0.3], [0.92, -0.16], [0.94, -0.55], [0.82, -1.05], [0.66, -1.0], [0.66, -0.6]], 'z', 0.85, (x, y) => 1.24 - 0.28 * (x - 0.62) + 0.06 * y, 0.03),
