@@ -17,7 +17,7 @@ export const FLOOR_Y = -1.74;
 // where each view sits on the two reference sheets: origin pixel (x, y) of the visor centre line; px per unit
 export const SHEETS = {
   unicorn: {front: [243, 590], side: [610, 590], back: [962, 590], top: [1308, 520], k: 100},
-  destroy: {front: [277, 465], side: [620, 465], back: [955, 465], top: [1300, 540], k: 100},
+  destroy: {front: [277, 465], side: [620, 465], back: [955, 465], top: [1300, 540], k: 80},
 };
 
 const GROUND_VERT = /* glsl */ `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
@@ -183,8 +183,11 @@ export function createHeadStage({canvas}) {
   const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   const VIEW_DIR = {front: [new V3(0, 0, 1), new V3(0, 1, 0)], side: [new V3(1, 0, 0), new V3(0, 1, 0)], back: [new V3(0, 0, -1), new V3(0, 1, 0)], top: [new V3(0, 1, 0), new V3(0, 0, 1)]};
   const COLS = {front: [0, 430], side: [430, 800], back: [800, 1135], top: [1135, 1536]};
-  const renderOrtho = (sheetKey, st, W = 1536, H = 1024) => {
-    const sh = SHEETS[sheetKey];
+  const renderOrtho = (sheetKey, st, W = 1536, H = 1024, over = {}) => {
+    // over: {k, dx, dy} to fit a sheet whose drawing scale or placement differs (found by the ref-match loop)
+    const sh = {...SHEETS[sheetKey], ...(over.k ? {k: over.k} : {})};
+    const DX = over.dx || 0;
+    const DY = over.dy || 0;
     head.update(st);
     scene.background = null;
     scene.fog = null;
@@ -198,7 +201,8 @@ export function createHeadStage({canvas}) {
     renderer.setScissor(0, 0, W, H);
     renderer.clear();
     for (const v of ['front', 'side', 'back', 'top']) {
-      const [cx, cy] = sh[v];
+      const cx = sh[v][0] + DX;
+      const cy = sh[v][1] + DY;
       const k = sh.k;
       const [dir, up] = VIEW_DIR[v];
       ortho.left = -cx / k;

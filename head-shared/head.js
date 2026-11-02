@@ -10,41 +10,42 @@ import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 
 const V3 = THREE.Vector3;
+const POD_UP = 0.28;
 
 // helmet surface, read off the Unicorn sheet: [y, half width, front z, back z]
 const SHELL = [
-  [-1.15, 0.8, 0.85, -1.1],
-  [-0.55, 0.98, 1.15, -1.45],
-  [0.3, 1.07, 1.35, -1.6],
-  [0.95, 1.05, 1.38, -1.5],
-  [1.4, 0.93, 1.22, -1.28],
-  [1.72, 0.68, 0.95, -0.95],
-  [1.92, 0.38, 0.58, -0.66],
-  [2.0, 0.16, 0.35, -0.4],
+  [-1.15, 0.68, 0.85, -0.98],
+  [-0.55, 0.92, 1.15, -1.18],
+  [0.3, 1.07, 1.35, -1.45],
+  [0.95, 0.9, 1.34, -1.3],
+  [1.4, 0.66, 1.02, -1.05],
+  [1.62, 0.5, 0.86, -0.8],
+  [1.8, 0.3, 0.66, -0.3],
+  [1.9, 0.14, 0.44, -0.12],
 ];
 // the skull under it, pulled in, with the face recessed for the faceplate and eye unit
 const CORE = [
-  [-1.2, 0.7, 0.62, -1.02],
-  [-0.55, 0.86, 0.8, -1.32],
-  [0.3, 0.95, 0.92, -1.46],
-  [0.95, 0.94, 1.18, -1.38],
-  [1.4, 0.83, 1.08, -1.16],
-  [1.72, 0.59, 0.84, -0.84],
-  [1.9, 0.32, 0.52, -0.56],
-  [1.97, 0.12, 0.3, -0.34],
+  [-1.2, 0.58, 0.62, -0.9],
+  [-0.55, 0.8, 0.8, -1.18],
+  [0.3, 0.95, 0.92, -1.37],
+  [0.95, 0.86, 1.16, -1.18],
+  [1.4, 0.66, 0.88, -0.78],
+  [1.62, 0.42, 0.74, -0.48],
+  [1.8, 0.2, 0.54, -0.2],
+  [1.87, 0.08, 0.36, -0.06],
 ];
 
 // helmet plates, left side (mirrored for the right): u in degrees at the plate's bottom (ub) and top (ut)
 // red: which edges carry a psycho-frame strip underneath (b/t bottom/top, l/r the u0/u1 side)
 const PLATES = [
-  {k: 'crownF', ub: [12, 58], ut: [14, 76], yb: [1.18, 1.5], yt: [1.98, 1.98], lift: 1, up: 1, red: 'br', off: 0.05, t: 0.1},
-  {k: 'crownR', ub: [58, 166], ut: [76, 166], yb: [1.5, 1.42], yt: [1.98, 1.98], lift: 1, up: 1, red: 'b', off: 0.05, t: 0.1},
+  {k: 'crownF', side: 0.2, ub: [12, 58], ut: [14, 76], yb: [1.18, 1.5], yt: [1.98, 1.98], lift: 1, up: 1, red: 'br', off: 0.05, t: 0.1},
+  {k: 'crownR', side: 1.0, ub: [58, 166], ut: [76, 166], yb: [1.5, 1.42], yt: [1.98, 1.98], lift: 1, up: 1, red: 'b', off: 0.05, t: 0.1},
   {k: 'forehead', ub: [18, 56], ut: [12, 58], yb: [0.98, 0.98], yt: [1.18, 1.5], lift: 0.6, up: 0.6, red: 'b'},
-  {k: 'temple', ub: [56, 118], ut: [58, 118], yb: [0.78, 0.78], yt: [1.5, 1.42], lift: 0.8, up: 0.5, red: 'lb', off: 0.03, t: 0.13},
-  {k: 'rearUp', ub: [118, 166], ut: [118, 166], y: [0.45, 1.42], lift: 0.8, up: 0.4, red: 'lbr', off: 0.025, t: 0.11},
-  {k: 'sideMid', ub: [62, 118], ut: [56, 118], y: [-0.6, 0.78], lift: 0.35, up: 0, red: ''},
-  {k: 'rearLow', ub: [118, 166], ut: [118, 166], y: [-1.1, 0.45], lift: 0.6, up: 0, red: 'lr', off: -0.01},
-  {k: 'sideLow', ub: [68, 118], ut: [62, 118], y: [-1.12, -0.6], lift: 0.3, up: 0, red: ''},
+  {k: 'temple', side: 0.9, ub: [56, 118], ut: [58, 118], yb: [0.78, 0.78], yt: [1.5, 1.42], lift: 0.8, up: 0.5, red: 'lb', off: 0.03, t: 0.13},
+  {k: 'rearUp', side: 0.9, ub: [118, 166], ut: [118, 166], y: [0.45, 1.42], lift: 0.8, up: 0.4, red: 'lbr', off: 0.025, t: 0.11},
+  {k: 'sideMid', side: 1, ub: [62, 118], ut: [56, 118], y: [-0.6, 0.78], lift: 0.35, up: 0, red: ''},
+  {k: 'rearLow', side: 2.4, ub: [118, 166], ut: [118, 166], y: [-1.1, 0.45], lift: 0.6, up: 0, red: 'lr', off: -0.01},
+  {k: 'sideLow', side: 1, ub: [68, 118], ut: [62, 118], y: [-1.12, -0.6], lift: 0.3, up: 0, red: ''},
 ];
 function materials() {
   const std = (o) => new THREE.MeshStandardMaterial({roughness: 0.5, metalness: 0, envMapIntensity: 0.6, ...o});
@@ -241,7 +242,7 @@ export function buildHead() {
     const ex = normal.clone().multiplyScalar(1.15).add(new V3(0, 0.25, 0));
     const part = add(g, ex, (p, obj) => {
       const k = p.crown;
-      obj.position.addScaledVector(normal, CROWN.lift * k * c.lift).add(new V3(0, CROWN.rise * k * c.up, 0));
+      obj.position.addScaledVector(normal, CROWN.lift * k * c.lift).add(new V3(Math.sign(center.x) * CROWN.spread * k * (c.side ?? 0), CROWN.rise * k * c.up, 0));
     });
     plateParts.push({part, center, c, ...extra});
     return part;
@@ -259,7 +260,7 @@ export function buildHead() {
       up.push(surf.normal(0, y));
     }
     for (const z of [0.15, -0.2]) {
-      path.push(new V3(0, 2.02, z));
+      path.push(new V3(0, 1.94, z));
       up.push(new V3(0, 1, 0));
     }
     for (const y of [1.95, 1.8, 1.6, 1.42]) {
@@ -270,7 +271,7 @@ export function buildHead() {
     const geo = geoOf((m) =>
       sweep(m, path, up, (i) => {
         const w = 0.17 + 0.07 * (i / (n - 1));
-        return [[-w, -0.06], [w, -0.06], [w, 0.08], [w * 0.7, 0.15], [-w * 0.7, 0.15], [-w, 0.08]];
+        return [[-w, -0.06], [w, -0.06], [w, 0.05], [w * 0.7, 0.1], [-w * 0.7, 0.1], [-w, 0.05]];
       }),
     );
     const g = new THREE.Group();
@@ -280,17 +281,17 @@ export function buildHead() {
 
   // ---------------------------------------------------------------- rear fin
   {
-    const geo = geoOf((m) => prism(m, [[-1.46, 1.52], [-1.74, 1.44], [-1.82, 0.95], [-1.76, 0.32], [-1.5, 0.22]], 'x', -0.13, 0.13, 0.03));
+    const geo = geoOf((m) => prism(m, [[-1.25, 1.22], [-1.45, 1.15], [-1.53, 0.8], [-1.55, 0.3], [-1.4, 0.2]], 'x', -0.13, 0.13, 0.03));
     const g = new THREE.Group();
     g.add(mesh(geo, M.white));
-    const sensor = mesh(geoOf((m) => prism(m, [[-1.79, 0.62], [-1.79, 0.48], [-1.83, 0.5], [-1.83, 0.6]], 'x', -0.07, 0.07, 0)), M.lens, false);
+    const sensor = mesh(geoOf((m) => prism(m, [[-1.53, 0.62], [-1.53, 0.48], [-1.565, 0.5], [-1.565, 0.6]], 'x', -0.07, 0.07, 0)), M.lens, false);
     g.add(sensor);
     add(g, new V3(0, 0.3, -1.3), (p, obj) => obj.position.add(new V3(0, FIN.rise * p.fin, -0.08 * p.fin)));
     anchors.fin = {obj: g, p: new V3(0, 1.4, -1.75)};
   }
 
   // ---------------------------------------------------------------- brow and forehead block (main camera, horn root)
-  const browFar = (x, y) => 1.62 - 0.4 * x - 0.25 * (y - 0.3);
+  const browFar = (x, y) => 1.75 - 0.4 * x - 0.45 * (y - 0.3);
   {
     // the eyebrow: a narrow blade along the top of the eyes, it stays put
     const blade = geoOf((m) =>
@@ -312,7 +313,7 @@ export function buildHead() {
   }
   const block = new THREE.Group();
   {
-    const far = (x, y) => 1.7 - 0.3 * (y - 0.2) - 0.2 * Math.abs(x);
+    const far = (x, y) => 1.6 - 0.45 * (y - 0.2) - 0.2 * Math.abs(x);
     block.add(
       mesh(
         geoOf((m) => prism(m, [[-0.12, 0.15], [0.12, 0.15], [0.2, 0.5], [0.21, 1.35], [0.15, 1.66], [-0.15, 1.66], [-0.21, 1.35], [-0.2, 0.5]], 'z', 0.95, far, 0.035)),
@@ -334,8 +335,8 @@ export function buildHead() {
     const horn = new THREE.Group();
     horn.position.set(...HORN.root);
     horn.quaternion.setFromUnitVectors(new V3(0, 1, 0), dir);
-    const W = (f) => 0.33 * (1 - f) ** 0.5 + 0.006;
-    const Dp = (f) => 0.21 * (1 - f) + 0.006;
+    const W = (f) => 0.27 * (1 - f) ** 0.75 + 0.006; // the Unicorn sheet's horn wins over the Destroy sheet's wider fins
+    const Dp = (f) => 0.25 * (1 - f) + 0.006;
     const SEG = [0, 0.24, 0.46, 0.64, 0.8, 1];
     const half = (s) => {
       const m = new Mesher();
@@ -384,7 +385,7 @@ export function buildHead() {
     add(horn, new V3(0, 1.5, 0.25), (p, obj) => {
       const a = p.hornAngle * D2R;
       for (const {pv, h, s} of halves) {
-        pv.rotation.z = -s * a;
+        pv.rotation.set(HORN.pitch * D2R * p.horn, 0, -s * a); // split in the face plane, then lean the V back
         pv.position.set(s * (0.02 + HORN.spread * p.horn), 0.06 - HORN.drop * p.horn, 0);
         h.position.y = -0.06 - HORN.sink * p.horn;
       }
@@ -485,14 +486,14 @@ export function buildHead() {
   // ---------------------------------------------------------------- cheek guards
   for (const s of [1, -1]) {
     const geo = geoOf((m) =>
-      prism(m, [[1.26, -0.02], [1.3, -0.42], [1.12, -0.95], [0.62, -1.02], [0.48, -0.55], [0.6, -0.02]], 'x', 0.7, (a) => 0.99 - 0.13 * (a - 0.5), 0.035),
+      prism(m, [[1.26, -0.02], [1.3, -0.42], [1.12, -0.8], [0.62, -0.86], [0.48, -0.5], [0.6, -0.02]], 'x', 0.7, (a) => 0.99 - 0.13 * (a - 0.5), 0.035),
     );
     const cap = geoOf((m) =>
-      prism(m, [[0.7, -0.3], [0.98, -0.16], [1.0, -0.6], [0.8, -1.12], [0.6, -1.05], [0.62, -0.62]], 'z', 0.85, (x, y) => 1.24 - 0.28 * (x - 0.62) + 0.06 * y, 0.03),
+      prism(m, [[0.7, -0.3], [0.98, -0.16], [1.0, -0.55], [0.8, -0.98], [0.6, -0.95], [0.62, -0.6]], 'z', 0.85, (x, y) => 1.24 - 0.28 * (x - 0.62) + 0.06 * y, 0.03),
     );
     const g = new THREE.Group();
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white), mesh(s > 0 ? cap : mirrorX(cap), M.white));
-    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * 0.12 * p.cheek, -0.04 * p.cheek, -0.06 * p.cheek)));
+    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (0.12 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.06 * p.cheek)));
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }
 
@@ -500,7 +501,7 @@ export function buildHead() {
   for (const s of [1, -1]) {
     const M2 = (geo) => (s > 0 ? geo : mirrorX(geo));
     const pod = new THREE.Group();
-    const poly = [[0.42, 0.52], [0.45, -0.62], [0.2, -0.85], [-0.62, -0.85], [-0.8, -0.6], [-0.8, 0.35], [-0.6, 0.55]];
+    const poly = [[0.42, 0.52], [0.45, -0.42], [0.2, -0.6], [-0.62, -0.6], [-0.8, -0.4], [-0.8, 0.35], [-0.6, 0.55]];
     pod.add(mesh(M2(geoOf((m) => prism(m, poly, 'x', 0.92, 1.36, 0.04))), M.white));
     // side grilles: dark windows with slats
     for (const [z0, z1, y0, y1] of [[0.28, 0.06, 0.32, -0.3], [-0.18, -0.6, 0.3, -0.12]]) {
@@ -512,7 +513,8 @@ export function buildHead() {
     }
     // front grille
     pod.add(mesh(M2(geoOf((m) => prism(m, [[1.0, 0.3], [1.24, 0.3], [1.24, -0.25], [1.0, -0.25]], 'z', 0.38, 0.465, 0.01))), M.lens, false));
-    add(pod, new V3(s * 1.6, 0.05, -0.1));
+    pod.position.y = POD_UP; // the front sheet puts the pods higher than the side sheet; front wins
+    add(pod, new V3(s * 1.6, 0.05, -0.1), (p, obj) => (obj.position.x += s * CROWN.spread * p.crown));
     if (s > 0) anchors.pod = {obj: pod, p: new V3(1.37, 0.0, -0.3)};
     // cooling duct inside the pod
     const duct = new THREE.Group();
@@ -521,7 +523,8 @@ export function buildHead() {
       const yy = -0.48 + k * 0.13;
       duct.add(mesh(M2(geoOf((m) => prism(m, [[0.15, yy + 0.03], [-0.5, yy + 0.03], [-0.5, yy - 0.02], [0.15, yy - 0.02]], 'x', 1.17, 1.22, 0.006))), M.frame, false));
     }
-    add(duct, new V3(s * 0.9, 0, -0.1));
+    duct.position.y = POD_UP;
+    add(duct, new V3(s * 0.9, 0, -0.1), (p, obj) => (obj.position.x += s * CROWN.spread * 0.7 * p.crown));
     if (s > 0) anchors.duct = {obj: duct, p: new V3(1.2, -0.1, -0.2)};
     // vulcan: barrel through the temple, muzzle forward
     const vul = new THREE.Group();

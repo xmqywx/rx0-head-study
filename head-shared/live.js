@@ -132,7 +132,7 @@ export function runLive() {
     canvas.style.height = '1024px';
     document.body.style.background = 'transparent';
     document.documentElement.style.background = 'transparent';
-    st.renderOrtho(key, {d, explode: +(hash.get('ex') ?? 0), armor: 1, time: 0, ink: hash.get('ink') !== '0'});
+    st.renderOrtho(key, {d, explode: +(hash.get('ex') ?? 0), armor: 1, time: 0, ink: hash.get('ink') !== '0'}, 1536, 1024, {k: +(hash.get('k') || 0), dx: +(hash.get('dx') || 0), dy: +(hash.get('dy') || 0)});
     window.__ready = true;
     return;
   }

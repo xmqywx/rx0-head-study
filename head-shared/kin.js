@@ -30,10 +30,10 @@ export const stage = (d, k) => ease((d - STAGES[k][0]) / (STAGES[k][1] - STAGES[
 export const raw = (d, k) => clamp01((d - STAGES[k][0]) / (STAGES[k][1] - STAGES[k][0]));
 
 // mechanism constants (units)
-export const HORN = {root: [0, 1.45, 0.95], tip: [0, 4.57, 1.55], split: 57, spread: 0.42, drop: 0.5, sink: 0.6};
+export const HORN = {root: [0, 1.45, 0.75], tip: [0, 4.57, 1.5], split: 52, spread: 0.42, drop: 0.5, sink: 0.6, pitch: 0};
 HORN.len = Math.hypot(HORN.tip[1] - HORN.root[1], HORN.tip[2] - HORN.root[2]);
 export const MASK = {slide: 0.36, back: 0.45, yaw: 0.6, drop: 0.14};
-export const CROWN = {lift: 0.13, rise: 0.08};
+export const CROWN = {lift: 0.13, rise: 0.08, spread: 0.22}; // spread: the side armor opens outward, the Destroy head is wider
 export const FRAME_RISE = 0.13; // the psycho-frame pushes out into the opened seams
 export const FIN = {rise: 0.36};
 export const FACE = {travel: 0.14};
