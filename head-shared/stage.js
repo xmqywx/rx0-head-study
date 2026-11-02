@@ -9,6 +9,7 @@ import {Pass} from 'three/addons/postprocessing/Pass.js';
 import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {buildHead} from './head.js';
+import {HORN} from './kin.js';
 
 const V3 = THREE.Vector3;
 export const COL = {bg: '#eef0f0', ground: '#e8ebea', mark: '#cfd6d6', shadow: '#3c4a52'};
@@ -224,5 +225,51 @@ export function createHeadStage({canvas}) {
     }
     renderer.setScissorTest(false);
   };
-  return {renderer, scene, camera, head, composer, gtao, sun, resize, frame, project, size, setQuality, renderOrtho, bloom};
+  // one part alone, at its part sheet's layout (reference/parts/<part>.png): origin pixel per view, px per unit,
+  // the sheet's own lean for the horn. Only the part's objects are drawn (layer 1).
+  const PART_SHEETS = {
+    horn: {front: [183, 715], side: [534, 715], back: [777, 715], k: 200, cols: {front: [0, 320], side: [320, 630], back: [630, 930]}, lean: Math.atan2(189, 612)},
+  };
+  const renderPart = (key, W = 1536, H = 1024) => {
+    const sh = {...PART_SHEETS[key]};
+    if (key === 'horn') sh.k = PART_SHEETS.horn.k / HORN.partScale;
+    head.update({d: 0, explode: 0, armor: 1, time: 0});
+    const objs = key === 'horn' ? head.hornParts : [];
+    const [blade] = objs;
+    blade.quaternion.setFromAxisAngle(new V3(1, 0, 0), sh.lean);
+    for (const o of objs) o.traverse((c) => c.layers.set(1));
+    scene.traverse((c) => c.isLight && c.layers.enableAll());
+    const origin = blade.position.clone();
+    ortho.layers.set(1);
+    scene.background = null;
+    scene.fog = null;
+    renderer.setPixelRatio(1);
+    renderer.setSize(W, H, false);
+    renderer.setClearColor(0x000000, 0);
+    renderer.setScissorTest(true);
+    renderer.setViewport(0, 0, W, H);
+    renderer.setScissor(0, 0, W, H);
+    renderer.clear();
+    for (const v of ['front', 'side', 'back']) {
+      const [cx, cy] = sh[v];
+      const [dirv, up] = VIEW_DIR[v];
+      ortho.left = -cx / sh.k;
+      ortho.right = (W - cx) / sh.k;
+      ortho.top = cy / sh.k;
+      ortho.bottom = -(H - cy) / sh.k;
+      ortho.position.copy(origin).addScaledVector(dirv, 30);
+      ortho.up.copy(up);
+      ortho.lookAt(origin);
+      ortho.updateProjectionMatrix();
+      ortho.updateMatrixWorld();
+      sun.target.position.copy(origin);
+      sun.position.copy(origin).addScaledVector(dirv, 10).add(new V3(-3, 6, 3));
+      sun.target.updateMatrixWorld();
+      const [x0, x1] = sh.cols[v];
+      renderer.setScissor(x0, 0, x1 - x0, H);
+      renderer.render(scene, ortho);
+    }
+    renderer.setScissorTest(false);
+  };
+  return {renderer, scene, camera, head, composer, gtao, sun, resize, frame, project, size, setQuality, renderOrtho, renderPart, bloom};
 }

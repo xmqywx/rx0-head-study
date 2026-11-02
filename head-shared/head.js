@@ -337,10 +337,6 @@ export function buildHead() {
     add(ug, new V3(0, 0.45, 0.9), (p, obj) => obj.position.add(new V3(0, 0.11 * p.crown, -0.06 * p.crown)));
     add(g, new V3(0, 0.15, 1.0), (p, obj) => obj.position.add(new V3(0, 0, 0.04 * p.crown)));
     anchors.brow = {obj: g, p: new V3(0.55, 0.6, 1.5)};
-    // the horn's root housing: a block behind the horn base, on the crown's front
-    const hb = new THREE.Group();
-    hb.add(mesh(geoOf((m) => prism(m, [[0.86, 1.48], [0.5, 1.52], [0.42, 1.95], [0.6, 2.06], [0.82, 1.86]], 'x', -0.2, 0.2, 0.03)), M.white));
-    add(hb, new V3(0, 1.2, 0.2));
   }
   const block = new THREE.Group();
   {
@@ -360,30 +356,47 @@ export function buildHead() {
   }
 
   // ---------------------------------------------------------------- horn: two segmented halves on a split hinge
+  // Traced from reference/parts/horn.png (Codex part sheet, 200 px = 1 unit, origin = blade root centre): seven
+  // segments meeting in down-pointing chevrons, a section that runs from a chamfered octagon at the root to a sharp
+  // diamond at the tip, the two halves split on the centre line. The root housing is in head axes (it does not lean).
+  const hornParts = [];
   {
     const dir = new V3(0, HORN.tip[1] - HORN.root[1], HORN.tip[2] - HORN.root[2]).normalize();
     const L = HORN.len;
     const horn = new THREE.Group();
     horn.position.set(...HORN.root);
     horn.quaternion.setFromUnitVectors(new V3(0, 1, 0), dir);
-    const W = (f) => 0.27 * (1 - f) ** 0.75 + 0.006; // the Unicorn sheet's horn wins over the Destroy sheet's wider fins
-    const Dp = (f) => 0.32 * (1 - f) ** 0.9 + 0.006;
-    const SEG = [0, 0.24, 0.46, 0.64, 0.8, 1];
+    horn.userData.dir = dir;
+    const PS = HORN.partScale;
+    const W = (f) => PS * 0.258 * Math.max(0, 1 - f) ** 0.72 + 0.004; // half width, front view
+    const Dp = (f) => PS * 0.24 * Math.max(0, 1 - f) ** 0.62 + 0.004; // half depth, side view
+    const pf = (f) => 0.5 + 0.2 * Math.max(0, 1 - f) ** 1.5; // 0.7 = octagon at the root, 0.5 = diamond at the tip
+    const SEG = [0, 0.13, 0.32, 0.47, 0.62, 0.74, 1];
+    const CHEV = 0.55; // seam rises this much per unit out from the centre line
     const half = (s) => {
       const m = new Mesher();
+      const ring = (f, k, rise) => {
+        const w = W(f) * k;
+        const d = Dp(f) * k;
+        const p = pf(f);
+        return [[0, d], [s * p * w, p * d], [s * w, 0], [s * p * w, -p * d], [0, -d]].map(([l, n]) => new V3(l, f * L + (rise ? CHEV * Math.abs(l) : 0), n));
+      };
       for (let i = 0; i < SEG.length - 1; i++) {
-        const f0 = SEG[i] + (i ? 0.006 : 0);
-        const f1 = SEG[i + 1];
-        const fs = [f0, f0 + 0.03, f1];
-        const path = fs.map((f) => new V3(0, f * L, 0));
-        const up = fs.map(() => new V3(0, 0, 1));
-        sweep(m, path, up, (j) => {
-          const f = fs[j];
-          const k = j === 0 ? 1.0 : j === 1 ? 1.13 : 1;
-          const w = W(f) * k;
-          const d = Dp(f) * k;
-          return [[0, d], [s * w * 0.55, d * 0.5], [s * w, 0], [s * w * 0.55, -d * 0.5], [0, -d]];
-        });
+        const f0 = SEG[i] + (i ? 0.004 : 0);
+        const f1 = SEG[i + 1] - (i < SEG.length - 2 ? 0.004 : 0);
+        // each segment starts with a slightly proud collar, then tapers to the next seam
+        const R = [ring(f0, 1.0, i > 0), ring(f0 + 0.012, 1.035, i > 0), ring(f1, 1.0, i < SEG.length - 2)];
+        for (let r = 0; r < R.length - 1; r++)
+          for (let j = 0; j < 5; j++) {
+            const j1 = (j + 1) % 5;
+            const out = new V3(R[r][j].x + R[r][j1].x, 0, R[r][j].z + R[r][j1].z);
+            if (j === 4) out.set(-s, 0, 0);
+            m.quad(R[r][j], R[r][j1], R[r + 1][j1], R[r + 1][j], out);
+          }
+        for (const [Rk, sg] of [[R[0], -1], [R[2], 1]]) {
+          const c = Rk.reduce((a, v) => a.add(v), new V3()).multiplyScalar(1 / 5);
+          for (let j = 0; j < 5; j++) m.tri(c, Rk[j], Rk[(j + 1) % 5], new V3(0, sg, 0));
+        }
       }
       const g = new THREE.Group();
       g.add(mesh(m.geo(), M.white));
@@ -398,6 +411,32 @@ export function buildHead() {
       horn.add(pv);
       return {pv, h, s};
     });
+    hornParts.push(horn);
+
+    // root housing, in part px → units: front x = (px-183)/200, side z = (534-px)/200, y = (715-py)/200
+    const fx = (px) => (PS * (px - 183)) / 200;
+    const sz = (px) => (PS * (534 - px)) / 200;
+    const yy = (py) => (PS * (715 - py)) / 200;
+    const ramp = (y) => sz(401) + ((sz(483) - sz(401)) * (y - yy(898))) / (yy(790) - yy(898)); // the base's front slope
+    const base = new THREE.Group();
+    base.position.set(...HORN.root);
+    // core: the side profile, a front ramp and a stepped back, across the lugs
+    const side = [[401, 898], [571, 898], [577, 870], [592, 830], [606, 790], [601, 750], [598, 705], [560, 700], [487, 748], [483, 790], [452, 830]].map(([x, y]) => [sz(x), yy(y)]);
+    base.add(mesh(geoOf((m) => prism(m, side, 'x', -0.24 * PS, 0.24 * PS, 0.03)), M.white));
+    // cheek blocks either side of the core, each with a slot on its front
+    const cheek = [[230, 792], [263, 790], [292, 828], [287, 872], [268, 898], [230, 898]].map(([x, y]) => [fx(x), yy(y)]);
+    base.add(mesh(geoOf((m) => prism(m, cheek, 'z', sz(590), (x, y) => ramp(y) - 0.02, 0.03, {mirror: true})), M.white));
+    base.add(mesh(geoOf((m) => prism(m, [[fx(262), yy(840)], [fx(282), yy(845)], [fx(282), yy(852)], [fx(262), yy(847)]], 'z', 0.2, (x, y) => ramp(y) - 0.014, 0.004, {mirror: true})), M.lens, false));
+    // the two lugs that hug the blade's root
+    const lug = [[208, 795], [253, 795], [253, 748], [246, 722], [230, 714], [214, 728], [208, 750]].map(([x, y]) => [fx(x), yy(y)]);
+    base.add(mesh(geoOf((m) => prism(m, lug, 'z', sz(600), sz(470), 0.025, {mirror: true})), M.white));
+    // front tab at the foot of the ramp
+    base.add(mesh(geoOf((m) => prism(m, [[fx(157), yy(860)], [fx(210), yy(860)], [fx(210), yy(898)], [fx(157), yy(898)]], 'z', sz(500), (x, y) => ramp(y) + 0.015, 0.02)), M.white));
+    // side slots (a long diagonal one and a short vertical one)
+    for (const poly of [[[530, 790], [582, 772], [584, 780], [532, 798]], [[546, 828], [553, 828], [553, 856], [546, 856]]])
+      base.add(mesh(geoOf((m) => prism(m, poly.map(([x, y]) => [sz(x), yy(y)]), 'x', 0.2, 0.245 * PS, 0.004, {mirror: true})), M.lens, false));
+    add(base, new V3(0, 1.0, 0.3), (p, obj) => obj.position.add(new V3(0, 0.26 * p.crown, 0.03 * p.crown)));
+    hornParts.push(base);
     // the hinge: two knuckles and an axle across the horn's root, lit up only by the explode
     const hinge = new THREE.Group();
     const knuckle = new THREE.CylinderGeometry(0.11, 0.11, 0.2, 10);
@@ -655,5 +694,5 @@ export function buildHead() {
     a.obj.updateWorldMatrix(true, false);
     a.p = a.obj.worldToLocal(a.p.clone().applyMatrix4(root.matrixWorld));
   }
-  return {root, update, anchors, anchorWorld, materials: M, surf};
+  return {root, update, anchors, anchorWorld, materials: M, surf, hornParts};
 }

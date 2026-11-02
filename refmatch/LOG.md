@@ -23,3 +23,11 @@ Open: destroy side view is ~20 % longer front-to-back than its own front view im
 | u5 | .899/…/… (.882) | brow prow deepened to .62, back panel pulled in .06, crown cap seated on the shell as the top strip (was a floating lid) |
 
 Note: IoU went down from .911 on purpose in u4 — the side sheet's pod height and the visible neck were chosen over the front-sheet silhouette.
+
+## Pass 3 — part by part (user: generate one part sheet at a time, then align)
+| round | part IoU F/S/B (avg) | head U / D | change |
+|---|---|---|---|
+| h1 | .902/.880/.906 (.896) | — | horn from reference/parts/horn.png: 7 chevron segments, octagon→diamond section, split halves; root housing (core, cheek blocks with slots, lugs, front tab, side slots) |
+| h2 | .939/.929/.940 (.936) | — | blade 6 % slimmer (sheet outline stroke), smaller collars, housing front follows the ramp |
+| h3 | .950/.928/.953 (.944) | .885 / .768 | narrow core, pointed lugs |
+| h4 ✗ | (.942) | .878 / .736 | root raised to the crown surface (1.45→1.8) to show the housing: still hidden, head worse — reverted |

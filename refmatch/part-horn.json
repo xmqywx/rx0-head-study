@@ -1,0 +1,11 @@
+{
+  "reference": "../reference/parts/horn.png",
+  "render": "out/render-part-horn.png",
+  "k": 200,
+  "out": "out",
+  "views": [
+    {"name": "front", "box": [60, 90, 320, 915]},
+    {"name": "side", "box": [320, 90, 630, 915]},
+    {"name": "back", "box": [640, 90, 910, 915]}
+  ]
+}

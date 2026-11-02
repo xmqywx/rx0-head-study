@@ -122,6 +122,14 @@ export function runLive() {
   const st = createHeadStage({canvas});
 
   const hash = new URLSearchParams(location.hash.slice(1));
+  if (hash.get('part')) {
+    app.style.width = canvas.style.width = '1536px';
+    app.style.height = canvas.style.height = '1024px';
+    document.body.style.background = document.documentElement.style.background = 'transparent';
+    st.renderPart(hash.get('part'));
+    window.__ready = true;
+    return;
+  }
   if (hash.get('ortho')) {
     // overlay-check mode: draw the four views where the sheet has them, and stop
     const key = hash.get('ortho');
