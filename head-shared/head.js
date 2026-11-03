@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, prismSplit, shellPlate, prismDense, sweep, viewHull, foldedShell, planarPanel} from './geo.js';
 import {ConvexGeometry} from 'three/addons/geometries/ConvexGeometry.js';
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {mergeGeometries, toCreasedNormals} from 'three/addons/utils/BufferGeometryUtils.js';
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 
 const V3 = THREE.Vector3;
@@ -29,7 +29,7 @@ const faceZ = (y) => {
 const FACE_SURF = (x, y) => {
   const a = Math.abs(x);
   const o = Math.max(0, a - 0.2);
-  return faceZ(y) - 0.15 * a - 0.55 * o - 0.3 * o * o;
+  return faceZ(y) - 0.1 * a - 0.35 * o - 0.15 * o * o; // mask edge (x .74) ≈ z 1.02, cheek front (.92) ≈ .91: the side view's cheek edge
 };
 const POD_UP = 0.08; // the side sheet sets the pod low on the head, the front sheet higher; the side wins (it is the view people read)
 
@@ -50,18 +50,16 @@ const CORE = [
   [-0.55, 0.8, 0.8, -0.98],
   [0.3, 0.95, 0.92, -1.37],
   [0.95, 0.86, 0.92, -1.18],
-  [1.4, 0.66, 0.74, -0.78],
-  [1.62, 0.42, 0.64, -0.48],
-  [1.8, 0.2, 0.54, -0.2],
-  [1.87, 0.08, 0.36, -0.06],
+  [1.4, 0.6, 0.5, -0.78],
+  [1.62, 0.38, 0.4, -0.48],
+  [1.8, 0.18, 0.3, -0.2],
+  [1.87, 0.08, 0.2, -0.06],
 ];
 
 // helmet plates, left side (mirrored for the right): u in degrees at the plate's bottom (ub) and top (ut)
 // red: which edges carry a psycho-frame strip underneath (b/t bottom/top, l/r the u0/u1 side)
 const PLATES = [
-  {k: 'crownF', side: 0.2, ub: [12, 58], ut: [14, 76], yb: [1.18, 1.5], yt: [1.98, 1.98], lift: 1, up: 1, red: 'br', off: 0.05, t: 0.1},
   {k: 'crownR', side: 1.0, ub: [58, 166], ut: [76, 166], yb: [1.5, 1.42], yt: [1.98, 1.98], lift: 1, up: 1, red: 'b', off: 0.05, t: 0.1},
-  {k: 'temple', side: 0.9, ub: [56, 118], ut: [58, 118], yb: [0.78, 0.78], yt: [1.5, 1.42], lift: 0.8, up: 0.5, red: 'lb', off: 0.03, t: 0.13},
   {k: 'rearUp', side: 0.9, ub: [118, 166], ut: [118, 166], y: [0.45, 1.42], lift: 0.8, up: 0.4, red: 'lbr', off: 0.025, t: 0.11},
   {k: 'sideMid', side: 1, ub: [62, 118], ut: [56, 118], y: [-0.5, 0.78], lift: 0.35, up: 0, red: ''},
   {k: 'rearLow', side: 2.4, ub: [118, 166], ut: [118, 166], yb: [-0.86, -0.9], yt: [0.45, 0.45], lift: 0.6, up: 0, red: 'lr', off: -0.01},
@@ -97,6 +95,8 @@ export function buildHead() {
   // ink: true for white/grey parts; a number sets the crease angle (curved parts use a high one so only real
   // creases and outlines are drawn, not the facets of the curve)
   const mesh = (geo, mat, ink = mat === M.white || mat === M.grey) => {
+    // a numeric ink marks a curved part: smooth its normals across shallow angles so the facets of the curve do not band
+    if (typeof ink === 'number') geo = toCreasedNormals(geo, 28 * D2R);
     const o = new THREE.Mesh(geo, mat);
     o.castShadow = true;
     o.receiveShadow = true;
@@ -427,7 +427,9 @@ export function buildHead() {
         [P3(-0.26, 1.3, 1.02), P3(0.26, 1.3, 1.02), P3(0.26, 1.75, 1.02), P3(-0.26, 1.75, 1.02)],
         [P3(0.26, 1.3, 1.02), P3(0.26, 1.3, 0.5), P3(0.26, 1.75, 0.5), P3(0.26, 1.75, 1.02)],
         [P3(-0.26, 1.3, 1.02), P3(-0.26, 1.3, 0.5), P3(-0.26, 1.75, 0.5), P3(-0.26, 1.75, 1.02)],
-      ], T, {centre: new V3(0, 1.45, 0.7)}),
+        [P3(-0.26, 1.3, 0.5), P3(0.26, 1.3, 0.5), P3(0.26, 1.75, 0.5), P3(-0.26, 1.75, 0.5)],
+        [P3(-0.26, 1.75, 1.02), P3(0.26, 1.75, 1.02), P3(0.26, 1.75, 0.5), P3(-0.26, 1.75, 0.5)],
+      ], T, {centre: new V3(0, 1.45, 0.76)}),
     );
     browGroup.add(mesh(col, M.white));
     // grooves on the column sides and the small raised tab at its front top (side view)
@@ -444,10 +446,12 @@ export function buildHead() {
     const win = geoOf((m) =>
       foldedShell(m, MX([
         [P3(0, 1.12, 0.98), P3(0, 0.5, 1.26), P3(0.25, 0.5, 1.2), P3(0.25, 1.12, 0.92)], // floor
-        [P3(0.25, 0.5, 1.2), P3(0.25, 1.12, 0.92), P3(0.25, 1.12, 0.78), P3(0.25, 0.5, 1.06)], // side wall
-      ]), 0.03, {centre: new V3(0, 0.72, 0.4)}),
+        [P3(0.25, 0.5, 1.2), P3(0.25, 1.12, 0.92), P3(0.36, 1.12, 0.92), P3(0.36, 0.5, 1.2)], // pillar front (x .25–.36)
+        [P3(0.36, 0.5, 1.2), P3(0.36, 1.12, 0.92), P3(0.36, 1.12, 0.78), P3(0.36, 0.5, 1.06)], // pillar outer wall
+      ]), T, {centre: new V3(0, 0.72, 0.4)}),
     );
-    browGroup.add(mesh(win, M.grey, false));
+    browGroup.add(mesh(win, M.white));
+    browGroup.add(mesh(geoOf((m) => prism(m, [[-0.24, 0.52], [0.24, 0.52], [0.24, 1.1], [-0.24, 1.1]], 'z', 0.7, (x, y) => 0.98 + (0.28 * (1.12 - y)) / 0.62 + 0.004, 0.004)), M.grey, false));
     const floorZ = (y) => 0.98 + (0.28 * (1.12 - y)) / 0.62;
     browGroup.add(mesh(geoOf((m) => prism(m, [[-0.16, 0.55], [0.16, 0.55], [0.16, 1.0], [-0.16, 1.0]], 'z', 0.8, (x, y) => floorZ(y) + 0.012, 0.004)), M.lens, false));
     const cam = mesh(geoOf((m) => prism(m, [[-0.1, 0.62], [0.1, 0.62], [0.1, 0.93], [-0.1, 0.93]], 'z', 0.8, (x, y) => floorZ(y) + 0.02, 0.004)), M.green, false);
@@ -623,7 +627,7 @@ export function buildHead() {
       add(jg, new V3(0, -1.0, 0.9), (p, obj) => obj.position.add(new V3(0, 0.28 * p.mask, -0.42 * p.mask)));
     }
     // visor band (f3-front): centre .03 / −.13, outer end x .92 at .30 / .15, on the face surface
-    const visor = mk((m) => prismDense(m, [[0.006, 0.03], [0.006, -0.13], [0.7, 0.03], [0.92, 0.15], [0.92, 0.3]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
+    const visor = mk((m) => prismDense(m, [[0.006, 0.1], [0.006, -0.13], [0.7, 0.03], [0.92, 0.15], [0.92, 0.36], [0.78, 0.27], [0.4, 0.13]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
     const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white, 40));
     const vg = new THREE.Group();
     vg.add(mesh(visor, M.visor, false));
