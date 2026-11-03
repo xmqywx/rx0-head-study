@@ -955,9 +955,10 @@ export function buildHead() {
       geoOf((m) =>
         viewHull(m, {
           // hexagonal block hanging from the faceplate's point (sheet: ±.18, y −.70 … −1.25)
-          front: [[-0.15, -0.72], [0.15, -0.72], [0.15, -1.0], [0.09, -1.16], [-0.09, -1.16], [-0.15, -1.0]],
-          side: [[0.85, -0.72], [1.1, -0.72], [1.25, -0.98], [1.22, -1.16], [0.85, -1.16]],
-          top: [[-0.18, 0.95], [0.18, 0.95], [0.18, 1.2], [0.1, 1.3], [-0.1, 1.3], [-0.18, 1.2]],
+          // S-02: front a hexagon chamfered at the top, flat at the bottom; side a slab leaning forward 45°
+          front: [[-0.12, -0.72], [0.12, -0.72], [0.18, -0.82], [0.18, -1.12], [-0.18, -1.12], [-0.18, -0.82]],
+          side: [[0.92, -0.72], [1.12, -0.72], [1.45, -1.06], [1.42, -1.12], [1.24, -1.12]],
+          top: [[-0.18, 0.92], [0.18, 0.92], [0.18, 1.36], [0.1, 1.46], [-0.1, 1.46], [-0.18, 1.36]],
         }),
       ),
       M.chin,
@@ -966,7 +967,8 @@ export function buildHead() {
     // the dark jaw behind the shield and beside the chin (sheet: dark grey parts round the chin, no opening)
     {
       const jw = new THREE.Group();
-      jw.add(mesh(geoOf((m) => prism(m, [[-0.5, -0.1], [0.5, -0.1], [0.5, -0.9], [0.3, -1.3], [-0.3, -1.3], [-0.5, -0.9]], 'z', 0.75, 0.95, 0.02)), M.frame, false));
+      jw.add(mesh(geoOf((m) => viewHull(m, {front: [[-0.42, -0.7], [0.42, -0.7], [0.38, -1.05], [0.22, -1.2], [-0.22, -1.2], [-0.38, -1.05]], side: [[0.7, -0.7], [1.06, -0.7], [1.12, -0.95], [0.98, -1.2], [0.7, -1.2]], top: [[-0.42, 0.7], [0.42, 0.7], [0.36, 1.1], [0.2, 1.14], [-0.2, 1.14], [-0.36, 1.1]]})), M.frame, false));
+      jw.add(mesh(geoOf((m) => prism(m, [[-0.5, -0.1], [0.5, -0.1], [0.5, -0.7], [-0.5, -0.7]], 'z', 0.75, 0.95, 0.02)), M.frame, false));
       jw.userData.noRed = true;
       add(jw, new V3(0, 0, 0));
     }
