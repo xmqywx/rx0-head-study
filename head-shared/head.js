@@ -736,7 +736,7 @@ export function buildHead() {
     // forward again to 1.30) minus a cross curve that turns the face back toward the cheeks. Mask pieces, chin and
     // cheek front all lie on this one surface, so they read as one convex face with a dip between face and chin.
     const mask = FACE_SURF;
-    const T_FACE = 0.07;
+    const T_FACE = 0.08;
     // Layered as reference/parts/face.png draws it, each layer a uniform-thickness sheet (foldedShell) on the
     // face plane at its own height: the raised inner panel under the visor, the outer strip stepping back beside
     // it down to the chin
