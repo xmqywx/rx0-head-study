@@ -18,7 +18,7 @@ export const FLOOR_Y = -1.74;
 // where each view sits on the two reference sheets: origin pixel (x, y) of the visor centre line; px per unit
 export const SHEETS = {
   unicorn: {front: [243, 590], side: [610, 590], back: [962, 590], top: [1308, 520], k: 100},
-  destroy: {front: [277, 465], side: [620, 465], back: [955, 465], top: [1300, 540], k: 80},
+  destroy: {front: [285, 481], side: [620, 467], back: [953, 481], top: [1298, 468], k: 80, topUp: -1, kv: {top: 100.0}},
 };
 
 const GROUND_VERT = /* glsl */ `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
@@ -204,8 +204,10 @@ export function createHeadStage({canvas}) {
     for (const v of ['front', 'side', 'back', 'top']) {
       const cx = sh[v][0] + DX;
       const cy = sh[v][1] + DY;
-      const k = sh.k;
-      const [dir, up] = VIEW_DIR[v];
+      const kv = (sh.kv && sh.kv[v]) || sh.k; // a view may be drawn at its own scale
+      const k = kv;
+      const [dir, up0] = VIEW_DIR[v];
+      const up = v === 'top' && sh.topUp ? up0.clone().multiplyScalar(sh.topUp) : up0; // a sheet may draw the top view front-down
       ortho.left = -cx / k;
       ortho.right = (W - cx) / k;
       ortho.top = cy / k;

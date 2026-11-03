@@ -81,7 +81,7 @@ function materials() {
     steel: std({color: '#8d959c', roughness: 0.35, metalness: 0.7}),
     visor: std({color: '#1b2128', roughness: 0.16, metalness: 0.5, envMapIntensity: 1}),
     lens: std({color: '#0d1114', roughness: 0.75, metalness: 0.05, envMapIntensity: 0.15}),
-    red: std({color: '#7c1f1a', emissive: '#ff1a0a', emissiveIntensity: 0, roughness: 0.3, metalness: 0.15, envMapIntensity: 0.9}),
+    red: std({color: '#c81e14', emissive: '#ff1a0a', emissiveIntensity: 0, roughness: 0.3, metalness: 0.15, envMapIntensity: 0.9}),
     chin: std({color: '#c8262a', roughness: 0.4}),
     maroon: std({color: '#6e1d1a', roughness: 0.45}),
     green: std({color: '#0f2016', emissive: '#39ff6e', emissiveIntensity: 0, roughness: 0.55, envMapIntensity: 0.3}),
@@ -575,7 +575,7 @@ export function buildHead() {
     const BROW = [[0.37, 0.49, 1.3], [0.68, 0.62, 1.1], [0.81, 0.92, 0.88], [0.97, 1.0, 0.7], [1.02, 0.55, 0.78], [0.92, 0.44, 0.95], [0.69, 0.36, 1.12], [0.4, 0.28, 1.27], [0.3, 0.26, 1.29]];
     shell([BROW.map(([x, y, z]) => P3(x, y, z))], new V3(0.55, 0.5, 0.3));
 
-    add(browGroup, new V3(0, 0.2, 1.0), (p, obj) => obj.position.add(new V3(0, 0.06 * p.crown, 0.04 * p.crown)));
+    add(browGroup, new V3(0, 0.2, 1.0), (p, obj) => obj.position.add(new V3(0, 0.06 * p.crown, 0.16 * p.crown))); // slides forward in NT-D (Destroy sheet: prow further out)
     anchors.brow = {obj: browGroup, p: new V3(0.62, 0.85, pz(0.62, 0.85))};
   }
 
@@ -635,9 +635,14 @@ export function buildHead() {
       h.position.set(-s * 0.02, -0.06, 0);
       pv.add(h);
       // the V-fin blade this half opens into (Destroy sheet): flat, chamfered, a notched root on its lower edge
-      const BL = [[-0.03, -0.05], [0.26, -0.05], [0.44, 0.2], [0.4, 0.34], [0.27, 0.42], [0.24, 0.8], [0.05, 2.9], [-0.03, 2.85], [-0.05, 0.6]].map(([x, y]) => [s * x, y]);
-      const blade = mesh(geoOf((m) => prism(m, BL, 'z', -0.035, (x) => 0.05 - 0.06 * Math.abs(x - s * 0.1), 0.02)), M.white);
-      blade.visible = false;
+      const BL = [[-0.03, -0.05], [0.26, -0.05], [0.44, 0.2], [0.4, 0.34], [0.27, 0.42], [0.24, 0.8], [0.05, 2.5], [-0.03, 2.45], [-0.05, 0.6]].map(([x, y]) => [s * x, y]);
+      const BLW = 0.82; // fits inside the horn's depth when folded
+      const bl = mesh(geoOf((m) => prism(m, BL.map(([x, y]) => [x * BLW, y]), 'z', -0.012, 0.012, 0.006)), M.white);
+      const blade = new THREE.Group(); // the hinge: along the half's length at the front of its split face
+      blade.position.set(-s * 0.02, -0.06, 0.17);
+      bl.position.z = -0.17;
+      bl.position.x = 0;
+      blade.add(bl);
       pv.add(blade);
       horn.add(pv);
       return {pv, h, s, blade};
@@ -689,10 +694,9 @@ export function buildHead() {
         pv.rotation.set(HORN.pitch * D2R * p.horn, 0, -s * a); // split in the face plane, then lean the V back
         pv.position.set(s * (0.02 + HORN.spread * p.horn), 0.06 - HORN.drop * p.horn, 0);
         h.position.y = -0.06 - HORN.sink * p.horn;
-        const t = Math.min(1, Math.max(0, (p.horn - 0.4) / 0.6));
-        h.visible = p.horn < 0.4;
-        blade.visible = p.horn >= 0.4;
-        blade.scale.set(0.5 + 0.5 * t, 0.85 + 0.15 * t, 1);
+        // the flap swings out about its hinge as the halves open: folded (s·90°) inside the horn → flat, facing forward
+        blade.rotation.y = s * (Math.PI / 2) * (1 - p.horn);
+        blade.position.y = -0.06 - HORN.sink * p.horn;
       }
     });
     anchors.horn = {obj: halves[0].pv, p: new V3(0.05, 3.1, 1.36)};
@@ -765,6 +769,7 @@ export function buildHead() {
     const visor = mk((m) => prismDense(m, [[0.006, 0.1], [0.006, -0.16], [0.6, 0.05], [0.82, 0.16], [0.82, 0.37], [0.6, 0.31]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
     const pv = pivot(new V3(s * 0.74, -0.5, 1.0), mesh(shell, M.white)); // hinge on the outer edge
     pv.userData.noRed = true;
+    let maskRed = null;
     // the frame sheet that rides under this half: same outline, a little larger, just behind it, so the opened
     // half shows a red rim along its edges (Destroy sheet, "opened mask halves")
     {
@@ -772,9 +777,10 @@ export function buildHead() {
       r.computeBoundingBox();
       const c = r.boundingBox.getCenter(new V3());
       r.translate(-c.x, -c.y, -c.z);
-      r.scale(1.07, 1.05, 1);
+      r.scale(0.97, 0.97, 1);
       r.translate(c.x, c.y, c.z - 0.07);
-      pv.children[0].add(mesh(r, M.red, false));
+      maskRed = mesh(r, M.red, false);
+      pv.children[0].add(maskRed);
     }
     // the hinge itself: three knuckles on a vertical axle with bearing rings, between mask and cheek guard
     {
@@ -804,6 +810,7 @@ export function buildHead() {
       // slide out and back, outer edge swinging behind the cheek guard, so only the inner face stays in view
       obj.position.add(new V3(s * MASK.slide * k, -MASK.drop * k, -MASK.back * k));
       obj.rotation.y = s * MASK.yaw * k; // turned slightly outward, staying in front of the cheek (outer layer)
+      if (maskRed) maskRed.position.z = -0.3 * (1 - k); // its frame sheet slides back inside until the half opens
     });
     if (s > 0) anchors.mask = {obj: pv, p: new V3(0.45, -0.55, 1.15)};
   }
@@ -1073,6 +1080,7 @@ export function buildHead() {
   };
 
   const tmp = new V3();
+  let underSheet = null;
   const RED_OFF = new THREE.Color('#2b2e33'); // the frame under the shell reads as a dark seam until NT-D
   const RED_ON = new THREE.Color('#d41a10');
   const update = ({d = 0, explode = 0, armor = 1, time = 0, ink = true}) => {
@@ -1088,7 +1096,7 @@ export function buildHead() {
     // psycho-frame: dull red at rest, a breathing glow as NT-D builds
     const beat = 0.5 + 0.5 * Math.sin(time * (2.2 + 2 * p.frame));
     M.red.emissiveIntensity = p.frame * (0.55 + 0.35 * beat);
-    M.red.color.copy(RED_OFF).lerp(RED_ON, p.frame);
+    if (underSheet) underSheet.morphTargetInfluences[0] = p.frame; // the frame pieces push out under the plates
     M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
     return p;
   };
@@ -1125,12 +1133,20 @@ export function buildHead() {
       const c = g.boundingBox.getCenter(new V3());
       const out = c.clone().sub(C).normalize();
       g.translate(-c.x, -c.y, -c.z);
-      g.scale(1.05, 1.05, 1.05);
-      g.translate(c.x - out.x * 0.075, c.y - out.y * 0.075, c.z - out.z * 0.075);
-      list.push(g);
+      g.translate(c.x, c.y, c.z);
+      // two poses of the same piece: retracted deep inside (Unicorn Mode) and pushed out under its plate (NT-D)
+      const lo = g.clone();
+      lo.translate(-out.x * 0.65, -out.y * 0.65, -out.z * 0.65);
+      g.translate(-out.x * 0.075, -out.y * 0.075, -out.z * 0.075);
+      list.push([lo, g]);
     });
-    const under = mesh(mergeGeometries(list), M.red, false);
+    const base = mergeGeometries(list.map((q) => q[0]));
+    const raised = mergeGeometries(list.map((q) => q[1]));
+    base.morphAttributes.position = [raised.attributes.position];
+    base.morphAttributes.normal = [raised.attributes.normal];
+    const under = mesh(base, M.red, false);
     root.add(under);
+    underSheet = under;
     anchors.frame = {obj: under, p: surf.S(66 * D2R, 1.6)};
   }
   return {root, update, anchors, anchorWorld, materials: M, surf, hornParts};
