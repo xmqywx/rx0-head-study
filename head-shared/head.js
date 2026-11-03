@@ -616,17 +616,18 @@ export function buildHead() {
       // a funnel bezel: four trapezoid faces sloping in to a recessed window (Destroy sheet), the whole unit
       // tilted back so it sits inset at an angle; no red side blocks
       const cy = 0.79;
-      const Ro = [0.16, 0.15]; // outer half width / half height
-      const Ri = [0.095, 0.085]; // inner (window) half width / half height
+      const Ro = [0.17, 0.2]; // outer half width (at the bottom) / half height
+      const Ri = [0.105, 0.135]; // inner (window) half width (at the bottom) / half height
+      const TOP = 0.66; // trapezoid: the top edge is this fraction of the bottom
       const zo = cz + 0.0;
       const zi = cz - 0.025; // a shallow bevel: flat, flush with the forehead
-      const O = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ro[0] * (b > 0 ? 0.88 : 1), cy + b * Ro[1], zo));
-      const I = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ri[0], cy + b * Ri[1], zi));
+      const O = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ro[0] * (b > 0 ? TOP : 1), cy + b * Ro[1], zo));
+      const I = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ri[0] * (b > 0 ? TOP : 1), cy + b * Ri[1], zi));
       const bez = [0, 1, 2, 3].map((k) => [O[k], O[(k + 1) % 4], I[(k + 1) % 4], I[k]]);
       const tilt = new THREE.Group();
       tilt.add(mesh(geoOf((m) => foldedShell(m, bez, 0.025, {centre: new V3(0, cy, zi - 0.3)})), M.grey, false));
-      tilt.add(mesh(geoOf((m) => prism(m, [[-Ri[0], cy - Ri[1]], [Ri[0], cy - Ri[1]], [Ri[0], cy + Ri[1]], [-Ri[0], cy + Ri[1]]], 'z', zi - 0.04, zi + 0.002, 0.004)), M.lens, false));
-      const cam = mesh(geoOf((m) => prism(m, [[-0.07, cy - 0.065], [0.07, cy - 0.065], [0.07, cy + 0.065], [-0.07, cy + 0.065]], 'z', zi - 0.04, zi + 0.006, 0.006)), M.camGreen, false);
+      tilt.add(mesh(geoOf((m) => prism(m, [[-Ri[0], cy - Ri[1]], [Ri[0], cy - Ri[1]], [Ri[0] * TOP, cy + Ri[1]], [-Ri[0] * TOP, cy + Ri[1]]], 'z', zi - 0.04, zi + 0.002, 0.004)), M.lens, false));
+      const cam = mesh(geoOf((m) => prism(m, [[-0.078, cy - 0.105], [0.078, cy - 0.105], [0.078 * TOP, cy + 0.105], [-0.078 * TOP, cy + 0.105]], 'z', zi - 0.04, zi + 0.006, 0.006)), M.camGreen, false);
       tilt.add(cam);
       // tilt back about the window's centre
       const pivotC = new V3(0, cy, zi);
