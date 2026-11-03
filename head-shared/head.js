@@ -88,6 +88,7 @@ function materials() {
     chin: std({color: '#c8262a', roughness: 0.4}),
     maroon: std({color: '#6e1d1a', roughness: 0.45}),
     eyeRim: std({color: '#123a1c', roughness: 0.4}),
+    camGreen: std({color: '#1d5a32', emissive: '#2fbf5c', emissiveIntensity: 0, roughness: 0.35}), // the camera: darker and dimmer than the eyes
     green: std({color: '#0f2016', emissive: '#39ff6e', emissiveIntensity: 0, roughness: 0.55, envMapIntensity: 0.3}),
     ink: new THREE.LineBasicMaterial({color: '#2a2f35', transparent: true, opacity: 0.8}),
   };
@@ -617,21 +618,21 @@ export function buildHead() {
       const cy = 0.79;
       const Ro = [0.16, 0.15]; // outer half width / half height
       const Ri = [0.095, 0.085]; // inner (window) half width / half height
-      const zo = cz + 0.05;
-      const zi = cz - 0.03;
+      const zo = cz + 0.0;
+      const zi = cz - 0.025; // a shallow bevel: flat, flush with the forehead
       const O = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ro[0] * (b > 0 ? 0.88 : 1), cy + b * Ro[1], zo));
       const I = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ri[0], cy + b * Ri[1], zi));
       const bez = [0, 1, 2, 3].map((k) => [O[k], O[(k + 1) % 4], I[(k + 1) % 4], I[k]]);
       const tilt = new THREE.Group();
-      tilt.add(mesh(geoOf((m) => foldedShell(m, bez, 0.04, {centre: new V3(0, cy, zi - 0.3)})), M.grey, false));
+      tilt.add(mesh(geoOf((m) => foldedShell(m, bez, 0.025, {centre: new V3(0, cy, zi - 0.3)})), M.grey, false));
       tilt.add(mesh(geoOf((m) => prism(m, [[-Ri[0], cy - Ri[1]], [Ri[0], cy - Ri[1]], [Ri[0], cy + Ri[1]], [-Ri[0], cy + Ri[1]]], 'z', zi - 0.04, zi + 0.002, 0.004)), M.lens, false));
-      const cam = mesh(geoOf((m) => prism(m, [[-0.07, cy - 0.065], [0.07, cy - 0.065], [0.07, cy + 0.065], [-0.07, cy + 0.065]], 'z', zi - 0.04, zi + 0.012, 0.006)), M.green, false);
+      const cam = mesh(geoOf((m) => prism(m, [[-0.07, cy - 0.065], [0.07, cy - 0.065], [0.07, cy + 0.065], [-0.07, cy + 0.065]], 'z', zi - 0.04, zi + 0.006, 0.006)), M.camGreen, false);
       tilt.add(cam);
       // tilt back about the window's centre
       const pivotC = new V3(0, cy, zi);
       tilt.position.copy(pivotC);
       tilt.children.forEach((c) => c.position.sub(pivotC));
-      tilt.rotation.x = -0.32;
+      tilt.rotation.x = 0; // flat
       camUnit.add(tilt);
       camUnit.userData.red = new THREE.Object3D();
       anchors.camera = {obj: cam, p: new V3(0, cy, zi + 0.02)};
@@ -1399,6 +1400,7 @@ export function buildHead() {
     if (underSheet) underSheet.visible = explode < 0.25 && armor > 0.5;
     innerSkin.visible = explode < 0.25 && armor > 0.5; // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
     M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
+    M.camGreen.emissiveIntensity = 0.02 + 0.35 * p.eyes;
     return p;
   };
   const anchorWorld = (k, out = tmp) => {
