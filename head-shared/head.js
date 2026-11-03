@@ -475,7 +475,7 @@ export function buildHead() {
     })), M.white));
     add(g, new V3(0, 1.3, 0), (p, obj) => {
       obj.position.add(new V3(0, 0.06 * p.crown, 0.22 * p.crown)); // forward along the top; not lower, or it sinks into the crown plates
-      spineR.position.y = -0.14 * (1 - p.crown); // the frame band rises under the spine's edges in NT-D
+      spineR.position.y = -0.4 * (1 - p.crown); // deep inside in Unicorn Mode; rises under the spine's edges in NT-D
     });
     anchors.crown = {obj: g, p: new V3(0.35, 1.95, -0.3)};
   }
@@ -916,7 +916,7 @@ export function buildHead() {
       maskRedX = 0;
       // and the L in the fold between the half's inner panel and outer facet, seen from the front
       {
-        const F = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]]; // the fold between the inner panel and the outer facet: the sheet's L, left visible beside layer 2
+        const F = [[0.57, -0.08], [0.48, -0.62], [0.2, -1.02]]; // the fold between the inner panel and the outer facet: the sheet's L, left visible beside layer 2
         const fa = ([x, y], d) => new V3(s * (x + d), y, cylZ(x + d, y) + 0.07);
         const m3 = new Mesher();
         const fl = (w0, w1) => {
@@ -964,8 +964,14 @@ export function buildHead() {
       // slide out and back, outer edge swinging behind the cheek guard, so only the inner face stays in view
       obj.position.add(new V3(0, -MASK.drop * k, 0));
       obj.rotation.y = s * MASK.orbit * k; // slides round the head's cylinder
-      if (maskRed) maskRed.position.x = maskRedX - s * 0.25 * (1 - k); // the inner shell slides in until the half opens
-      if (maskFront) maskFront.position.z = -0.3 * (1 - k);
+      if (maskRed) {
+        maskRed.position.x = maskRedX - s * 0.25 * (1 - k); // the inner shell slides in until the half opens
+        maskRed.visible = k > 0.03;
+      }
+      if (maskFront) {
+        maskFront.position.z = -0.3 * (1 - k);
+        maskFront.visible = k > 0.03; // the seam it shows through only opens in NT-D
+      }
       if (maskL2) {
         maskL2.visible = k > 0.02;
         maskL2.position.x = -s * 0.2 * (1 - k); // slides out of the wall as the half opens
@@ -1080,10 +1086,14 @@ export function buildHead() {
     g.add(eyes);
     // the glowing frame bar standing in a dark slot beside each eye (sheet: x .84–.95, y .0 … .42, a hot core)
     const bar = new THREE.Group();
-    bar.add(
-      mesh(geoOf((m) => prism(m, [[0.84, 0.0], [0.95, 0.04], [0.95, 0.44], [0.84, 0.4]], 'z', 0.7, (x, y) => eyeFar(x, y) - 0.0, 0.01, {mirror: true})), M.red, false),
-      mesh(geoOf((m) => prism(m, [[0.875, 0.06], [0.915, 0.07], [0.915, 0.38], [0.875, 0.36]], 'z', 0.7, (x, y) => eyeFar(x, y) + 0.008, 0.004, {mirror: true})), M.redHot, false),
-    );
+    // a folded red frame plate (one thickness), its face turned out like the cheek, top cut at an angle; it sits
+    // under the brow plate's lower edge (y < .26) so nothing crosses it
+    {
+      const fz = (x, y) => eyeFar(x, y) + 0.04; // in front of the socket and the mask edges, nothing cuts it
+      const F = [[0.83, -0.02], [0.95, 0.02], [0.95, 0.2], [0.89, 0.25], [0.83, 0.22]].map(([x, y]) => new V3(x, y, fz(x, y)));
+      const geoB = geoOf((m) => foldedShell(m, [F], 0.06, {centre: new V3(0.6, 0.1, 0.5)}));
+      bar.add(mesh(geoB, M.red, false), mesh(mirrorX(geoB), M.red, false));
+    }
     g.add(bar);
     eyeBar = bar;
     // maroon sill under the eyes, from beside the nose out toward the cheek
@@ -1351,7 +1361,7 @@ export function buildHead() {
     M.redHot.emissiveIntensity = 1.6;
     void beat;
     if (underSheet) underSheet.morphTargetInfluences[0] = p.frame; // the frame pieces push out under the plates
-    if (underSheet) underSheet.visible = explode < 0.25; // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
+    if (underSheet) underSheet.visible = explode < 0.25 && p.frame > 0.02; // nothing red before NT-D // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
     M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
     return p;
   };
