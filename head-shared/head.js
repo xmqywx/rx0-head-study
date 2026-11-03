@@ -672,14 +672,17 @@ export function buildHead() {
     // the chin, and its side facet turning back toward the cheek; each a uniform sheet at its own height
     const U = (pts, lift) => pts.map(([x, y]) => new V3(x, y, mask(x, y) + lift));
     const shell = mk((m) => {
-      foldedShell(m, [U([[0.006, -0.03], [0.69, 0.15], [0.64, -0.55], [0.45, -0.65], [0.19, -0.9], [0.006, -0.9]], 0.03)], T_FACE, {centre: new V3(0.3, -0.4, 0)});
-      foldedShell(m, [U([[0.006, -0.92], [0.18, -0.92], [0.14, -1.2], [0.006, -1.2]], 0.03)], T_FACE, {centre: new V3(0.1, -1.0, 0)});
-      foldedShell(m, [U([[0.46, -0.67], [0.66, -0.6], [0.24, -1.36], [0.16, -1.2], [0.2, -0.92]], 0.0)], T_FACE, {centre: new V3(0.35, -0.9, 0)});
+      // re-read against the sheet on one grid (refmatch/out/face-grid.png): the upper panel's outer edge runs from
+      // under the visor at x .6 down and in to .47 at y −.6, then the diagonal to the fold at (.19, −1.0); outside
+      // it a long side facet from the visor's end (x .72) down to a point beside the chin (.28, −1.42)
+      foldedShell(m, [U([[0.006, -0.16], [0.6, 0.05], [0.47, -0.6], [0.19, -1.0], [0.006, -1.0]], 0.03)], T_FACE, {centre: new V3(0.3, -0.4, 0)});
+      foldedShell(m, [U([[0.006, -1.02], [0.18, -1.02], [0.13, -1.22], [0.006, -1.22]], 0.03)], T_FACE, {centre: new V3(0.1, -1.0, 0)});
+      foldedShell(m, [U([[0.61, 0.05], [0.72, 0.1], [0.57, -0.65], [0.28, -1.42], [0.14, -1.24], [0.2, -1.02], [0.48, -0.62]], 0.0)], T_FACE, {centre: new V3(0.35, -0.6, 0)});
     });
     // the jaw behind the layers: shaded metal where face.png shows the dark recess between strip and cheek, and a
     // closed face so the neck never shows through
     const jaw = mk((m) => {
-      const P = [[0.006, 0.12], [0.86, 0.22], [0.86, -0.55], [0.5, -1.15], [0.006, -1.3]].map(([x, y]) => new V3(x, y, mask(Math.min(x, 0.74), y) - 0.1));
+      const P = [[0.006, 0.0], [0.7, 0.1], [0.62, -0.7], [0.3, -1.4], [0.006, -1.4]].map(([x, y]) => new V3(x, y, mask(Math.min(x, 0.74), y) - 0.1));
       foldedShell(m, [P], 0.05, {centre: new V3(0.3, -0.5, -0.5)});
     });
     // one chin block under the V (not split): it bulges forward like the face above it and tucks up behind the
@@ -704,8 +707,8 @@ export function buildHead() {
     }
     // visor band (f3-front): centre .03 / −.13, outer end x .92 at .30 / .15, on the face surface
     // visor band (f3-front at 3x): centre .17 / −.03, it rises to the outer end x .92 at .40 / .28, sitting just above the mask panel's top edge
-    const visor = mk((m) => prismDense(m, [[0.006, 0.17], [0.006, -0.03], [0.69, 0.15], [0.92, 0.28], [0.92, 0.42], [0.69, 0.34]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
-    const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white), mesh(jaw, M.grey, false));
+    const visor = mk((m) => prismDense(m, [[0.006, 0.1], [0.006, -0.16], [0.6, 0.05], [0.82, 0.16], [0.82, 0.37], [0.6, 0.31]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
+    const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white), mesh(jaw, M.frame, false));
     const vg = new THREE.Group();
     vg.add(mesh(visor, M.visor, false));
     // the visor retracts into the brow before the mask halves part
@@ -794,9 +797,9 @@ export function buildHead() {
     // lower front corner cut to the point the side view shows. Uniform sheets, mirrored.
     const geo = geoOf((m) => {
       const back = (x, y, d) => new V3(x, y, FACE_SURF(Math.min(x, 0.7), y) - d - 0.9 * Math.max(0, x - 0.7));
-      const plate = [[0.7, 0.17], [0.93, 0.22], [0.93, -0.5], [0.86, -1.1], [0.62, -1.18], [0.67, -0.62]].map(([x, y]) => back(x, y, 0.02));
+      const plate = [[0.73, 0.2], [0.93, 0.24], [0.93, -0.45], [0.84, -0.78], [0.66, -0.66]].map(([x, y]) => back(x, y, 0.02)); // ends in a point at y −.78 (sheet)
       foldedShell(m, [plate], 0.07, {centre: new V3(0.5, -0.5, 0)});
-      const side = [[0.93, 0.22], [0.93, -0.5], [0.86, -1.1]].map(([x, y]) => back(x, y, 0.02));
+      const side = [[0.93, 0.24], [0.93, -0.45], [0.84, -0.78]].map(([x, y]) => back(x, y, 0.02));
       const sideB = [side[2].clone().add(new V3(0.05, 0.05, -0.45)), side[1].clone().add(new V3(0.06, 0, -0.5)), side[0].clone().add(new V3(0.06, 0, -0.5))];
       foldedShell(m, [[...side, ...sideB]], 0.07, {centre: new V3(0.5, -0.4, 0.6)});
     });
