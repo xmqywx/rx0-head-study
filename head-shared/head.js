@@ -929,7 +929,7 @@ export function buildHead() {
     // Destroy sheet: ±.6 at the top edge (y −.05), tapering to ±.22 at the chin (y −.70)
     // recessed between the opened mask halves (Destroy side sheet: the halves' front edges stand proud of it)
     // taller, as the sheet draws it: from the eye sill (y 0) down to the chin (−.88), edges tucked under the mask halves
-    const ROWS = [[0.0, 0.58, 1.1], [-0.5, 0.5, 1.07], [-0.88, 0.3, 1.02]]; // inside the mask halves' U (S-03), not in front of it
+    const ROWS = [[0.0, 0.58, 1.1], [-0.5, 0.5, 1.12], [-0.75, 0.34, 1.2]]; // the lower part comes forward to wrap the chin // inside the mask halves' U (S-03), not in front of it
     const P = (x, y, z) => new V3(x, y, z);
     const facets = [];
     for (let i = 0; i < 2; i++) {
@@ -946,8 +946,21 @@ export function buildHead() {
         facets.push([A, B, B.clone().add(d)], [A, B.clone().add(d), A.clone().add(d)]);
       }
     }
+    // two prongs carry the faceplate on down either side of the chin, turning in under it: the chin sits in the notch
+    for (const sx of [1, -1]) {
+      const Q = (x, y, z) => P(sx * x, y, z);
+      // in front of the mask halves' inner edges (sheet front view: the shield's sides run down beside the chin)
+      facets.push([Q(0.15, -0.75, 1.38), Q(0.34, -0.75, 1.2), Q(0.3, -1.06, 1.18), Q(0.15, -1.06, 1.32)]);
+      facets.push([Q(0.15, -1.06, 1.32), Q(0.3, -1.06, 1.18), Q(0.24, -1.16, 1.16), Q(0.15, -1.16, 1.28)]);
+    }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.1 + 0.3 + (0.03 / 0.5) * y; // on the ridge
+    const faceZ = (y) => {
+      // the ridge's depth, following ROWS
+      const i = y > ROWS[1][0] ? 0 : 1;
+      const [y0, , z0] = ROWS[i];
+      const [y1, , z1] = ROWS[i + 1];
+      return z0 + ((z1 - z0) * (y - y0)) / (y1 - y0) + 0.3;
+    };
     // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.2, -0.33, -0.46])
       g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.53 * Math.abs(x) + 0.014, 0.006, {mirror: true})), M.lens, false));
