@@ -131,6 +131,52 @@ export const DECALS = {
     g.fillStyle = RED;
     g.fillRect(80, 10, 8, 490);
   }), 96 / 512],
+  // a large back emblem: a chevron shield with a horn, unit text and stripes (original design)
+  emblem: () => [canvas(512, 512, (g) => {
+    g.strokeStyle = INK;
+    g.lineWidth = 10;
+    g.beginPath();
+    g.moveTo(256, 30);
+    g.lineTo(470, 110);
+    g.lineTo(440, 330);
+    g.lineTo(256, 480);
+    g.lineTo(72, 330);
+    g.lineTo(42, 110);
+    g.closePath();
+    g.stroke();
+    g.fillStyle = RED;
+    g.beginPath();
+    g.moveTo(256, 70);
+    g.lineTo(300, 330);
+    g.lineTo(256, 300);
+    g.lineTo(212, 330);
+    g.closePath();
+    g.fill();
+    g.fillStyle = INK;
+    g.font = FONT(64, 800);
+    g.textAlign = 'center';
+    g.fillText('RX-0', 256, 400);
+    g.font = FONT(26, 600);
+    g.fillText('U.C. 0096  ·  FULL PSYCHO-FRAME', 256, 440);
+    g.fillStyle = BLUE;
+    g.fillRect(100, 140, 60, 10);
+    g.fillRect(352, 140, 60, 10);
+  }), 1],
+  // a tall side panel stencil: stacked lines and small text, read along the plate
+  panel: () => [canvas(512, 128, (g) => {
+    g.fillStyle = INK;
+    g.font = FONT(30, 700);
+    g.fillText('ARMOR-B / 2.4  ', 8, 40);
+    g.fillStyle = RED;
+    g.fillRect(8, 56, 380, 7);
+    g.fillStyle = INK;
+    g.fillRect(396, 56, 100, 7);
+    g.fillStyle = BLUE;
+    g.fillRect(8, 74, 160, 5);
+    g.font = FONT(20, 600);
+    g.fillStyle = INK;
+    g.fillText('EXT. ARMOR — DO NOT REMOVE', 8, 112);
+  }), 4],
   ring: () => [canvas(128, 128, (g) => {
     g.strokeStyle = INK;
     g.lineWidth = 8;
@@ -149,6 +195,33 @@ export const DECALS = {
  * w, rot}] — a ray from `from` toward the head centre along −dir finds the armor surface; the decal is projected
  * there, sized w wide (height from its aspect), rotated rot about the surface normal, and parented to the hit mesh.
  */
+// the dominant direction of a part's vertices projected onto the plane with normal n (2D PCA)
+function longAxis(mesh, n) {
+  const P = mesh.geometry.attributes.position;
+  const v = new THREE.Vector3();
+  const pts = [];
+  const step = Math.max(1, Math.floor(P.count / 400));
+  for (let i = 0; i < P.count; i += step) pts.push(v.fromBufferAttribute(P, i).applyMatrix4(mesh.matrixWorld).clone());
+  const c = pts.reduce((a, q) => a.add(q), new THREE.Vector3()).multiplyScalar(1 / pts.length);
+  const t1 = new THREE.Vector3(0, 1, 0).cross(n);
+  if (t1.lengthSq() < 1e-4) t1.set(1, 0, 0).cross(n);
+  t1.normalize();
+  const t2 = n.clone().cross(t1).normalize();
+  let a = 0;
+  let b = 0;
+  let d = 0;
+  for (const q of pts) {
+    const x = q.clone().sub(c).dot(t1);
+    const y = q.clone().sub(c).dot(t2);
+    a += x * x;
+    b += x * y;
+    d += y * y;
+  }
+  if (Math.abs(a - d) < 1e-6 && Math.abs(b) < 1e-6) return null;
+  const ang = 0.5 * Math.atan2(2 * b, a - d);
+  return t1.clone().multiplyScalar(Math.cos(ang)).addScaledVector(t2, Math.sin(ang));
+}
+
 export function applyDecals(root, targets, spots, centre = new THREE.Vector3(0, 0.3, -0.2)) {
   root.updateMatrixWorld(true);
   const cache = {};
@@ -168,6 +241,18 @@ export function applyDecals(root, targets, spots, centre = new THREE.Vector3(0, 
     helper.up.set(0, 1, 0);
     if (Math.abs(n.y) > 0.9) helper.up.set(0, 0, -1);
     helper.lookAt(hit.point.clone().add(n));
+    // follow the armor: turn the decal so its long side runs along the part's long axis (in the tangent plane)
+    if (s.follow !== false) {
+      const axis = longAxis(hit.object, n);
+      if (axis) {
+        const xNow = new THREE.Vector3(1, 0, 0).applyQuaternion(helper.quaternion);
+        const yNow = new THREE.Vector3(0, 1, 0).applyQuaternion(helper.quaternion);
+        let a = Math.atan2(axis.dot(yNow), axis.dot(xNow));
+        if (a > Math.PI / 2) a -= Math.PI; // keep text reading left to right
+        if (a < -Math.PI / 2) a += Math.PI;
+        helper.rotateZ(a);
+      }
+    }
     helper.rotateZ(s.rot || 0);
     if (!cache[s.key]) {
       const [tex, aspect] = DECALS[s.key]();
@@ -177,7 +262,7 @@ export function applyDecals(root, targets, spots, centre = new THREE.Vector3(0, 
       };
     }
     const {mat, aspect} = cache[s.key];
-    const size = new THREE.Vector3(s.w, s.w / aspect, 0.25);
+    const size = new THREE.Vector3(s.w, s.w / aspect, s.depth ?? 0.08);
     const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, size);
     if (!geo.attributes.position || geo.attributes.position.count === 0) continue;
     geo.applyMatrix4(hit.object.matrixWorld.clone().invert()); // into the part's own space: it moves with the part

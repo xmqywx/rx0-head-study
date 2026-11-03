@@ -841,6 +841,7 @@ export function buildHead() {
     const cylZ = (x, y) => 0.1 + Math.sqrt(Math.max(0.05, (faceZ(y) - 0.1) ** 2 - x * x));
     const U = (pts, lift) => pts.map(([x, y]) => new V3(x, y, cylZ(x, y) + lift));
     let wallX = null;
+    let wallFacets = null;
     let wallBackZ = null;
     let wallFrontZ = null;
     const CYL = 0.1; // the head's vertical axis (z) the face pieces wrap round
@@ -868,8 +869,9 @@ export function buildHead() {
       wallX = (y, z) => Math.sqrt(Math.max(0, rW(y) ** 2 - (z - CYL) ** 2)); // on the head's cylinder
       wallBackZ = (y) => CYL + rW(y) * Math.cos(phiF(y) + WALL);
       wallFrontZ = zf;
-      foldedShell(m, [0, 1, 2].map((i) => [W[i], W[i + 1], Wb[i + 1], Wb[i]]), T_FACE, {centre: new V3(0.2, -0.45, 0.6)});
+      wallFacets = [0, 1, 2].map((i) => [W[i], W[i + 1], Wb[i + 1], Wb[i]]);
     });
+    const wallGeo = geoOf((m) => foldedShell(m, wallFacets, T_FACE, {centre: new V3(0.2, -0.45, 0.6)}));
     // the jaw behind the layers: shaded metal where face.png shows the dark recess between strip and cheek, and a
     // closed face so the neck never shows through
     const jaw = mk((m) => {
@@ -900,7 +902,8 @@ export function buildHead() {
     // visor band (f3-front): centre .03 / −.13, outer end x .92 at .30 / .15, on the face surface
     // visor band (f3-front at 3x): centre .17 / −.03, it rises to the outer end x .92 at .40 / .28, sitting just above the mask panel's top edge
     const visor = mk((m) => prismDense(m, [[0.006, 0.1], [0.006, -0.16], [0.6, 0.05], [0.82, 0.16], [0.82, 0.37], [0.6, 0.31]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
-    const pv = pivot(new V3(0, -0.5, CYL), mesh(shell, M.white)); // turns round the head's vertical axis: hugs the head
+    const wallMesh = mesh(s > 0 ? wallGeo : mirrorX(wallGeo), M.white);
+    const pv = pivot(new V3(0, -0.5, CYL), mesh(shell, M.white), wallMesh); // turns round the head's vertical axis: hugs the head
     pv.userData.noRed = true;
     let maskRed = null;
     let maskFront = null;
@@ -1006,6 +1009,7 @@ export function buildHead() {
         maskRed.position.x = maskRedX - s * 0.25 * (1 - k); // the inner shell slides in until the half opens
         maskRed.visible = k > 0.03;
       }
+      wallMesh.position.x = -s * 0.14 * (1 - k); // the side wall tucks inward behind the cheek until the half opens
       if (maskFront) {
         maskFront.position.z = -0.3 * (1 - k);
         maskFront.visible = k > 0.03; // the seam it shows through only opens in NT-D
@@ -1464,22 +1468,29 @@ export function buildHead() {
     const pair = (key, x, y, z, w, rot = 0) => [{key, dir: [x, y, z], w, rot}, {key, dir: [-x, y, z], w, rot: -rot}];
     const spots = [
       {key: 'unit', dir: [0.45, 0.55, 0.75], w: 0.5},
-      {key: 'number', dir: [-0.45, 0.55, 0.75], w: 0.22},
+      {key: 'number', dir: [-0.45, 0.55, 0.75], w: 0.22, follow: false},
       ...pair('caution', 0.9, 0.85, -0.2, 0.55, 0),
-      ...pair('number', 1, 0.15, -0.55, 0.26, 0),
-      ...pair('lines', 1, -0.35, 0.1, 0.6, -0.2),
-      ...pair('arrow', 0.5, -0.4, 1, 0.16, 1.2),
-      ...pair('lines', 0.35, 1, 0.2, 0.5, 1.57),
+      ...pair('lines', 1, -0.35, 0.1, 0.6, 0),
+      ...pair('lines', 0.35, 1, 0.2, 0.5, 0),
       ...pair('ring', 1, 0.6, 0.2, 0.1, 0),
+      ...pair('lines', 0.6, -0.7, 0.8, 0.36, 0),
+      // the sides: panel stencils, numbers and lines along the plates
+      ...pair('panel', 1, 0.45, -0.3, 0.62, 0),
+      ...pair('number', 1, 0.15, -0.55, 0.26, 0),
+      ...pair('lines', 1, 0.95, -0.6, 0.55, 0),
+      ...pair('panel', 1, -0.05, -0.95, 0.5, 0),
+      ...pair('ring', 0.9, -0.2, -0.6, 0.09, 0),
+      ...pair('arrow', 0.95, 0.4, -0.7, 0.14, 0),
+      ...pair('barcode', 1, -0.5, -0.4, 0.28, 0),
+      // the back: a large emblem, stencils either side
+      {key: 'emblem', dir: [0, 0.1, -1], from: [0, 0.35, -4], w: 0.62, follow: false, depth: 0.12},
+      ...pair('emblem', 0.5, 0.3, -1, 0.42, 0).map((q) => ({...q, follow: false, depth: 0.12})),
       ...pair('barcode', 0.55, 0.25, -1, 0.3, 0),
-      ...pair('lines', 0.6, -0.7, 0.8, 0.36, 0.35),
-      ...pair('ring', 0.9, -0.2, -0.6, 0.08, 0),
-      ...pair('arrow', 0.95, 0.4, -0.7, 0.13, 3.14),
-      ...pair('lines', 0.75, 0.2, -0.9, 0.4, 0.0),
-      {key: 'nostep', dir: [0, 1, -0.25], w: 0.36, rot: 0},
-      {key: 'vertical', dir: [0.12, 0.25, -1], w: 0.1, rot: 0},
-      {key: 'lines', dir: [0, -0.2, 1], from: [0.05, 2.6, 4], w: 0.32, rot: 1.45},
-      {key: 'caution', dir: [0, 0.4, -1], w: 0.42, rot: 0},
+      ...pair('caution', 0.5, 0.75, -1, 0.42, 0),
+      ...pair('lines', 0.55, -0.45, -1, 0.42, 0),
+      {key: 'nostep', dir: [0, 1, -0.25], w: 0.36, follow: false},
+      {key: 'vertical', dir: [0.12, 0.25, -1], w: 0.1, follow: false},
+      {key: 'lines', dir: [0, -0.2, 1], from: [0.05, 2.6, 4], w: 0.32, rot: 0},
     ];
     applyDecals(root, targets, spots);
   }
