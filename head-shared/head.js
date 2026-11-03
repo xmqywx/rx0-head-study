@@ -424,49 +424,85 @@ export function buildHead() {
   };
   {
     // the eyebrow: the lower facet, along the top of the eyes; it stays put
-    // Read off the Unicorn front view (reference/grid/u-forehead.png) and side view (u-side-brow.png): a pointed nose
-    // piece under the camera housing, its tip down on the visor's V; either side a brow wing whose two faces meet in a
-    // ridge rising outward (y = .45 + .12 x) — the ridge is the prow seen in the side view (tip z 1.68 at y .45) — the
-    // face below it sloping back down to the visor, the face above sloping back up to the crown; a dark slot in each
-    // wing's upper inner corner.
-    const ridgeY = (x) => 0.45 + 0.12 * Math.abs(x);
-    const wingZ = (x, y) => {
-      const d = y - ridgeY(x);
-      return 1.66 - 0.42 * Math.abs(x) - (d < 0 ? -0.95 * d : 0.55 * d);
+    // The brow, rebuilt as solids from 3D points read off the front view (u-forehead.png: x, y) and the side view
+    // (u-side-brow.png: z, y). Not a flat plate: a central nose wedge whose ridge runs from the camera housing
+    // forward and down to the prow tip (y .4, z 1.66) and then back under to the visor's V; either side a wing that
+    // wraps round the head in four convex pieces, each with an upper face sloping back up to the crown and a lower
+    // face sloping back down to the visor, meeting in a ridge that sweeps outward and back (z 1.45 → .97); the wing's
+    // outer top corner is cut, and a dark opening sits under its upper edge.
+    const hullGeo = (pts, mirror = false) =>
+      geoOf((m) => {
+        for (const sx of mirror ? [1, -1] : [1]) {
+          const P = pts.map(([x, y, z]) => new V3(sx * x, y, z));
+          const hull = new ConvexGeometry(P);
+          const pa = hull.attributes.position.array;
+          const c = P.reduce((q, v) => q.add(v), new V3()).multiplyScalar(1 / P.length);
+          for (let i = 0; i < pa.length; i += 9) {
+            const v = [0, 3, 6].map((o) => new V3(pa[i + o], pa[i + o + 1], pa[i + o + 2]));
+            m.tri(v[0], v[1], v[2], v[0].clone().add(v[1]).add(v[2]).multiplyScalar(1 / 3).sub(c));
+          }
+        }
+      });
+    const nose = hullGeo([
+      [0, 0.72, 1.44], [0.21, 0.7, 1.36], [0.36, 0.6, 1.28], [0, 0.39, 1.67], [0.16, 0.2, 1.36], [0, 0.08, 1.37],
+      [-0.21, 0.7, 1.36], [-0.36, 0.6, 1.28], [-0.16, 0.2, 1.36],
+      [0.3, 0.6, 0.95], [-0.3, 0.6, 0.95], [0.2, 0.72, 0.95], [-0.2, 0.72, 0.95], [0, 0.08, 0.95],
+    ]);
+    // the wing, sampled at x stations: ridge (y, z), top edge (y, z), visor edge (y, z)
+    const ridgeZ = (x) => 1.45 - 0.5 * (x - 0.36) - 0.6 * (x - 0.36) ** 2;
+    const st = (x) => {
+      const rz = ridgeZ(x);
+      const ty = x > 0.75 ? 1.16 - 1.4 * (x - 0.75) : 1.16; // the cut outer top corner
+      return {
+        ridge: [x, 0.56 - 0.08 * (x - 0.36), rz],
+        top: [x, ty + 0.15 * Math.max(0, 0.6 - x), rz - 0.42 - 0.25 * (x - 0.36)],
+        low: [x, 0.03 + (0.29 * x) / 0.92 + 0.04, rz - 0.13],
+      };
     };
-    const W = [[0.3, 0.62], [0.2, 0.08], [0.7, 0.07], [0.95, 0.32], [1.15, 0.58], [0.95, 1.0], [0.5, 1.0]];
+    // one continuous wing lofted through stations: the upper and lower faces stay smooth across x (they wrap round
+    // the head) and crease only along the ridge; back face and end caps close it
+    const XS = Array.from({length: 9}, (_, i) => 0.34 + (0.6 * i) / 8);
     const wings = geoOf((m) => {
-      for (const [a, b, c] of [[-0.12, 1, 0.45 - 0.006], [0.12, -1, -0.45 - 0.006]]) {
-        const P = clipPoly(W, a, b, c);
-        if (P.length >= 3) prismDense(m, P, 'z', (x, y) => wingZ(x, y) - 0.3, wingZ, 0.025, {seg: 0.08, mirror: true});
+      for (const sx of [1, -1]) {
+        const V = (q, dz = 0) => new V3(sx * q[0], q[1], q[2] + dz);
+        const R = XS.map((x) => {
+          const t = st(x);
+          return {r: V(t.ridge), t: V(t.top), l: V(t.low), tb: V(t.top, -0.3), lb: V(t.low, -0.3)};
+        });
+        const out = (a, b, c) => a.clone().add(b).add(c).multiplyScalar(1 / 3).sub(new V3(sx * 0.6, 0.6, 0.5));
+        for (let i = 0; i < R.length - 1; i++) {
+          const A = R[i];
+          const B = R[i + 1];
+          m.quad(A.t, A.r, B.r, B.t, out(A.t, A.r, B.r));
+          m.quad(A.r, A.l, B.l, B.r, out(A.r, A.l, B.l));
+          m.quad(A.l, A.lb, B.lb, B.l, new V3(0, -1, 0));
+          m.quad(A.tb, A.t, B.t, B.tb, new V3(0, 1, 0));
+          m.quad(A.lb, A.tb, B.tb, B.lb, new V3(0, 0, -1));
+        }
+        for (const [E, sg] of [[R[0], -1], [R[R.length - 1], 1]]) {
+          const n = new V3(sx * sg, 0, 0);
+          m.quad(E.t, E.r, E.l, E.lb, n);
+          m.tri(E.t, E.lb, E.tb, n);
+        }
       }
     });
-    const slot = geoOf((m) => prism(m, [[0.68, 0.74], [0.78, 0.76], [0.78, 0.98], [0.68, 0.94]], 'z', 0.9, (x, y) => wingZ(x, y) + 0.006, 0.006, {mirror: true}));
-    const noseZ = (x, y) => 1.72 - 0.75 * Math.abs(x) - 0.45 * Math.abs(y - 0.45);
-    const nose = geoOf((m) => {
-      // two facets either side of the centre line
-      prismDense(m, [[0.006, 0.64], [0.3, 0.64], [0.44, 0.4], [0.006, 0.13]], 'z', (x, y) => noseZ(x, y) - 0.35, noseZ, 0.02, {seg: 0.06, mirror: true});
-    });
+    // the dark opening under each wing's upper edge (front view x .6–.76, y .86–1.0)
+    const slot = hullGeo([[0.6, 0.98, ridgeZ(0.6) - 0.36], [0.76, 0.96, ridgeZ(0.76) - 0.45], [0.74, 0.84, ridgeZ(0.74) - 0.37], [0.6, 0.86, ridgeZ(0.6) - 0.3], [0.6, 0.98, ridgeZ(0.6) - 0.5], [0.76, 0.96, ridgeZ(0.76) - 0.6], [0.74, 0.84, ridgeZ(0.74) - 0.55], [0.6, 0.86, ridgeZ(0.6) - 0.45]], true);
     const g = new THREE.Group();
-    g.add(mesh(wings, M.white, 40), mesh(nose, M.white, 40), mesh(slot, M.lens, false));
+    g.add(mesh(wings, M.white, 40), mesh(nose, M.white), mesh(slot, M.lens, false));
     add(g, new V3(0, 0.15, 1.0), (p, obj) => obj.position.add(new V3(0, 0.06 * p.crown, 0.04 * p.crown)));
     anchors.brow = {obj: g, p: new V3(0.55, 0.6, 1.5)};
   }
   const block = new THREE.Group();
   {
-    const far = (x, y) => 1.6 - 0.45 * (y - 0.2) - 0.2 * Math.abs(x);
-    block.add(
-      mesh(
-        geoOf((m) => prism(m, [[-0.12, 0.15], [0.12, 0.15], [0.2, 0.5], [0.21, 1.35], [0.15, 1.66], [-0.15, 1.66], [-0.21, 1.35], [-0.2, 0.5]], 'z', 0.95, far, 0.035)),
-        M.white,
-      ),
-    );
+    const far = (x, y) => 1.42 - 0.35 * (y - 0.66) - 0.15 * Math.abs(x);
+    block.add(mesh(geoOf((m) => prism(m, [[-0.17, 0.66], [0.17, 0.66], [0.21, 0.74], [0.21, 1.2], [0.14, 1.32], [-0.14, 1.32], [-0.21, 1.2], [-0.21, 0.74]], 'z', 0.95, far, 0.03)), M.white));
     // main camera: a dark recess and a lens that lights with the eyes
-    block.add(mesh(geoOf((m) => prism(m, [[-0.09, 0.72], [0.09, 0.72], [0.09, 1.02], [-0.09, 1.02]], 'z', 1.2, (x, y) => far(x, y) + 0.004, 0.01)), M.lens, false));
-    const cam = mesh(geoOf((m) => prism(m, [[-0.055, 0.78], [0.055, 0.78], [0.055, 0.96], [-0.055, 0.96]], 'z', 1.2, (x, y) => far(x, y) + 0.012, 0.012)), M.green, false);
+    block.add(mesh(geoOf((m) => prism(m, [[-0.1, 0.69], [0.1, 0.69], [0.1, 0.93], [-0.1, 0.93]], 'z', 1.2, (x, y) => far(x, y) + 0.004, 0.01)), M.lens, false));
+    const cam = mesh(geoOf((m) => prism(m, [[-0.06, 0.73], [0.06, 0.73], [0.06, 0.89], [-0.06, 0.89]], 'z', 1.2, (x, y) => far(x, y) + 0.012, 0.012)), M.green, false);
     block.add(cam);
     add(block, new V3(0, 0.5, 1.4), (p, obj) => obj.position.add(new V3(0, 0.26 * p.crown, 0.03 * p.crown)));
-    anchors.camera = {obj: cam, p: new V3(0, 0.87, 1.5)};
+    anchors.camera = {obj: cam, p: new V3(0, 0.81, 1.47)};
   }
 
   // ---------------------------------------------------------------- horn: two segmented halves on a split hinge
@@ -780,12 +816,12 @@ export function buildHead() {
     const barrel = new THREE.CylinderGeometry(0.06, 0.07, 1.1, 10);
     barrel.rotateX(Math.PI / 2);
     const b = mesh(barrel, M.frameMid, false);
-    b.position.set(s * 0.86, 0.72, 0.5);
+    b.position.set(s * 0.86, 0.72, 0.05); // the muzzles sit back inside the brow until NT-D
     vul.add(b);
     const muzzle = new THREE.CylinderGeometry(0.085, 0.085, 0.12, 10);
     muzzle.rotateX(Math.PI / 2);
     const mz = mesh(muzzle, M.lens, false);
-    mz.position.set(s * 0.86, 0.72, 1.05);
+    mz.position.set(s * 0.86, 0.72, 0.57);
     vul.add(mz);
     const housing = mesh(M2(geoOf((m) => prism(m, [[-0.2, 0.62], [0.35, 0.62], [0.35, 0.84], [-0.2, 0.84]], 'x', 0.72, 1.0, 0.02))), M.frame, false);
     vul.add(housing);
