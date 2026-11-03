@@ -438,7 +438,8 @@ export function buildHead() {
     v.scale.set(1.05, 1, 1);
     v.position.set(0, 0.012, -0.005);
     g.add(v);
-    add(g, new V3(0, 1.3, 0), (p, obj) => obj.position.add(new V3(0, (CROWN.rise + 0.05) * p.crown, 0)));
+    // NT-D: the crown slides forward over the risen camera (Destroy sheet: the helmet crown block above the camera)
+    add(g, new V3(0, 1.3, 0), (p, obj) => obj.position.add(new V3(0, (CROWN.rise + 0.05) * p.crown - 0.08 * p.crown, 0.42 * p.crown)));
     anchors.crown = {obj: g, p: new V3(0.35, 1.95, -0.3)};
   }
 
@@ -549,10 +550,27 @@ export function buildHead() {
       [P3(0.15, 1.0, fl(1.0)), P3(0.23, 1.18, fl(1.18) + B), P3(0.23, 0.66, fl(0.66) + B), P3(0.15, 0.63, fl(0.63))],
       [P3(0.23, 1.18, fl(1.18) + B), P3(0.35, 1.18, fl(1.18) + B - 0.036), P3(0.27, 0.66, fl(0.66) + B - 0.012), P3(0.23, 0.66, fl(0.66) + B)],
     ], new V3(0, 0.9, 0.4));
-    browGroup.add(mesh(geoOf((m) => prism(m, [[-0.1, 0.63], [0.1, 0.63], [0.1, 0.93], [-0.1, 0.93]], 'z', 0.8, (x, y) => fl(y) + 0.075, 0.004)), M.lens, false));
-    const cam = mesh(geoOf((m) => prism(m, [[-0.065, 0.68], [0.065, 0.68], [0.065, 0.88], [-0.065, 0.88]], 'z', 0.8, (x, y) => fl(y) + 0.085, 0.004)), M.green, false);
-    browGroup.add(cam);
-    anchors.camera = {obj: cam, p: new V3(0, 0.78, fl(0.78) + 0.09)};
+    // the main camera unit: a chamfered housing with the window and lens, sitting in the recess in Unicorn Mode; in NT-D
+    // it slides out of the recess and up to between the V-fin roots (Destroy sheet front view), red frame either side
+    const camUnit = new THREE.Group();
+    {
+      const cz = fl(0.78) + 0.04;
+      camUnit.add(mesh(geoOf((m) => viewHull(m, {front: [[-0.14, 0.64], [0.14, 0.64], [0.17, 0.68], [0.17, 0.9], [0.14, 0.94], [-0.14, 0.94], [-0.17, 0.9], [-0.17, 0.68]], side: [[cz - 0.18, 0.64], [cz + 0.02, 0.64], [cz + 0.05, 0.68], [cz + 0.05, 0.9], [cz + 0.02, 0.94], [cz - 0.18, 0.94]]})), M.grey, false));
+      camUnit.add(mesh(geoOf((m) => prism(m, [[-0.11, 0.67], [0.11, 0.67], [0.11, 0.91], [-0.11, 0.91]], 'z', cz, cz + 0.056, 0.004)), M.lens, false));
+      const cam = mesh(geoOf((m) => prism(m, [[-0.075, 0.7], [0.075, 0.7], [0.075, 0.88], [-0.075, 0.88]], 'z', cz, cz + 0.064, 0.006)), M.green, false);
+      camUnit.add(cam);
+      // red frame either side of the housing
+      const camRed = mesh(geoOf((m) => prism(m, [[0.18, 0.62], [0.24, 0.66], [0.24, 0.98], [0.18, 0.94]], 'z', cz - 0.12, cz + 0.02, 0.008, {mirror: true})), M.red, false);
+      camUnit.add(camRed);
+      camUnit.userData.red = camRed;
+      anchors.camera = {obj: cam, p: new V3(0, 0.79, cz + 0.06)};
+      camUnit.userData.noRed = true;
+      add(camUnit, new V3(0, 0.6, 0.6), (p, obj) => {
+        const t = p.crown;
+        obj.position.add(new V3(0, 0.52 * t, 0.12 * Math.min(1, t * 2)));
+        obj.userData.red.position.z = -0.2 * (1 - t); // the frame either side slides out behind it
+      });
+    }
 
     // F-03: V inset (a, b, f), the beak's upper face (b, c, f) and lower face (f, c, g, h) on one plane
     const a = P3(0, 0.7, 1.34);
