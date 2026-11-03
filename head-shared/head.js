@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, prismSplit, shellPlate, prismDense, sweep, viewHull, foldedShell, planarPanel} from './geo.js';
 import {ConvexGeometry} from 'three/addons/geometries/ConvexGeometry.js';
 import {mergeGeometries, toCreasedNormals} from 'three/addons/utils/BufferGeometryUtils.js';
+import {applyDecals} from './decals.js';
 import {bearing, bracket, cables, clevis, gear, linkArm, linkPlate, motor, piston, place, rib, socket} from './mechparts.js';
 const merge3 = (list) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
@@ -1449,6 +1450,38 @@ export function buildHead() {
     root.add(under);
     underSheet = under;
     anchors.frame = {obj: under, p: surf.S(66 * D2R, 1.6)};
+  }
+  // marking decals (decals.js), laid in the Unicorn pose on the outer armor and carried by their parts
+  {
+    update({d: 0});
+    root.updateMatrixWorld(true);
+    const shown = (o) => {
+      for (let q = o; q; q = q.parent) if (!q.visible) return false;
+      return true;
+    };
+    const targets = [];
+    root.traverse((o) => o.isMesh && o.material === M.white && shown(o) && targets.push(o));
+    const pair = (key, x, y, z, w, rot = 0) => [{key, dir: [x, y, z], w, rot}, {key, dir: [-x, y, z], w, rot: -rot}];
+    const spots = [
+      {key: 'unit', dir: [0.45, 0.55, 0.75], w: 0.5},
+      {key: 'number', dir: [-0.45, 0.55, 0.75], w: 0.22},
+      ...pair('caution', 0.9, 0.85, -0.2, 0.55, 0),
+      ...pair('number', 1, 0.15, -0.55, 0.26, 0),
+      ...pair('lines', 1, -0.35, 0.1, 0.6, -0.2),
+      ...pair('arrow', 0.5, -0.4, 1, 0.16, 1.2),
+      ...pair('lines', 0.35, 1, 0.2, 0.5, 1.57),
+      ...pair('ring', 1, 0.6, 0.2, 0.1, 0),
+      ...pair('barcode', 0.55, 0.25, -1, 0.3, 0),
+      ...pair('lines', 0.6, -0.7, 0.8, 0.36, 0.35),
+      ...pair('ring', 0.9, -0.2, -0.6, 0.08, 0),
+      ...pair('arrow', 0.95, 0.4, -0.7, 0.13, 3.14),
+      ...pair('lines', 0.75, 0.2, -0.9, 0.4, 0.0),
+      {key: 'nostep', dir: [0, 1, -0.25], w: 0.36, rot: 0},
+      {key: 'vertical', dir: [0.12, 0.25, -1], w: 0.1, rot: 0},
+      {key: 'lines', dir: [0, -0.2, 1], from: [0.05, 2.6, 4], w: 0.32, rot: 1.45},
+      {key: 'caution', dir: [0, 0.4, -1], w: 0.42, rot: 0},
+    ];
+    applyDecals(root, targets, spots);
   }
   return {root, update, anchors, anchorWorld, materials: M, surf, hornParts};
 }
