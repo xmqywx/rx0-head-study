@@ -24,6 +24,7 @@ const VIEWS = {
   face: {tx: 0, ty: 0.25, tz: 0.6, az: 0.32, el: 0.05, d: 10.5},
   inside: {tx: 0, ty: 0.7, tz: 0, az: -0.8, el: 0.24, d: 23},
   horn: {tx: 0, ty: 1.5, tz: 0.72, az: 0.35, el: 0.3, d: 4.2},
+  cheek: {tx: 0.9, ty: -0.3, tz: 0.3, az: 1.35, el: 0.05, d: 7.5},
 };
 const VIEW_KEYS = Object.keys(VIEWS);
 

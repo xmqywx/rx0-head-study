@@ -15,7 +15,8 @@ const V3 = THREE.Vector3;
 // read at 3x off reference/grid/f3-side.png: upper face bulging 1.32 → 1.13, hollow at the fold, chin bulge 1.18, bottom 1.08
 // the face leans back in one straight slope from the visor (z 1.33) to the jaw (1.15 at y −.85): no waves; the
 // layering comes from the parts standing at different heights (FACE_PARTS), not from bending one surface
-const FACE_PROFILE = [[0.3, 1.37], [-0.85, 1.15], [-1.6, 1.0]];
+// one gentle fold (the user's red line, side view): the face leans slightly OUT from the visor to y −.4, then back
+const FACE_PROFILE = [[0.3, 1.33], [-0.4, 1.37], [-1.0, 1.16], [-1.6, 1.02]];
 const faceZ = (y) => {
   const P = FACE_PROFILE;
   if (y >= P[0][0]) return P[0][1];
@@ -797,11 +798,17 @@ export function buildHead() {
     // lower front corner cut to the point the side view shows. Uniform sheets, mirrored.
     const geo = geoOf((m) => {
       const back = (x, y, d) => new V3(x, y, FACE_SURF(Math.min(x, 0.7), y) - d - 0.9 * Math.max(0, x - 0.7));
-      const plate = [[0.73, 0.2], [0.93, 0.24], [0.93, -0.45], [0.84, -0.78], [0.66, -0.66]].map(([x, y]) => back(x, y, 0.02)); // ends in a point at y −.78 (sheet)
-      foldedShell(m, [plate], 0.07, {centre: new V3(0.5, -0.5, 0)});
-      const side = [[0.93, 0.24], [0.93, -0.45], [0.84, -0.78]].map(([x, y]) => back(x, y, 0.02));
-      const sideB = [side[2].clone().add(new V3(0.05, 0.05, -0.45)), side[1].clone().add(new V3(0.06, 0, -0.5)), side[0].clone().add(new V3(0.06, 0, -0.5))];
-      foldedShell(m, [[...side, ...sideB]], 0.07, {centre: new V3(0.5, -0.4, 0.6)});
+      // one folded sheet (side view at 4x, grid/cheek-side4.png: the guard spans z ~1.25 → .45, folded at its outer
+      // edge): the front facet turned back toward the side (front view x .73–.93), folded 135° at the outer edge into
+      // the side facet that reaches back under the pod; the side facet itself folds along y −.45, standing out there
+      const F = [[0.73, 0.2], [0.93, 0.24], [0.93, -0.45], [0.84, -0.78], [0.66, -0.66]].map(([x, y]) => back(x, y, 0.02));
+      const [E0, E1, E2] = [F[1], F[2], F[3]];
+      const B0 = new V3(0.97, 0.06, 0.45);
+      const B1 = new V3(1.03, -0.45, 0.6);
+      const B2 = new V3(0.92, -0.95, 0.78);
+      foldedShell(m, [F, [E0, B0, B1, E1], [E1, B1, B2, E2]], 0.07, {centre: new V3(0.5, -0.4, 0.5)});
+      const BR = [[0.45, -0.5], [0.12, -0.5], [0.12, -0.64], [0.28, -0.64], [0.3, -0.98], [0.44, -1.0]];
+      foldedShell(m, [BR.map(([z, y]) => new V3(1.0 + 0.1 * (y + 0.5), y, z))], 0.07, {centre: new V3(0.5, -0.7, 0.3)});
     });
     const g = new THREE.Group();
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white, 40));
