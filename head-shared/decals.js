@@ -86,6 +86,127 @@ export const DECALS = {
       g.fill();
     }
   }), 26],
+  // sci-fi / military engraving patterns (recessed details scribed into the plates): drawn as grooves with a light lip
+  // hatch: a chamfered access-panel outline with two fastener holes
+  hatch: (i = 0) => [canvas(256, 192, (g) => {
+    const G = 'rgba(40,44,50,0.9)';
+    const L = 'rgba(255,255,255,0.95)';
+    const path = (o) => {
+      g.beginPath();
+      g.moveTo(30 + o, 12 + o);
+      g.lineTo(226 - o, 12 + o);
+      g.lineTo(244 - o, 30 + o);
+      g.lineTo(244 - o, 162 - o);
+      g.lineTo(226 - o, 180 - o);
+      g.lineTo(30 + o, 180 - o);
+      g.lineTo(12 + o, 162 - o);
+      g.lineTo(12 + o, 30 + o);
+      g.closePath();
+    };
+    g.lineWidth = 7;
+    g.strokeStyle = G;
+    path(0);
+    g.stroke();
+    g.lineWidth = 3;
+    g.strokeStyle = L;
+    path(5);
+    g.stroke();
+    g.fillStyle = G;
+    for (const [x, y] of [[40, 40], [216, 152]]) {
+      g.beginPath();
+      g.arc(x, y, 7, 0, Math.PI * 2);
+      g.fill();
+    }
+    if (i % 2) {
+      g.fillRect(60, 90, 136, 6);
+      g.fillStyle = L;
+      g.fillRect(60, 96, 136, 2);
+    }
+  }), 256 / 192],
+  // vents: a row of short parallel slots
+  vents: (i = 0) => [canvas(256, 96, (g) => {
+    const n = 5 + (i % 3);
+    for (let k = 0; k < n; k++) {
+      const x = 14 + (k * 228) / n;
+      g.fillStyle = 'rgba(40,44,50,0.92)';
+      g.fillRect(x, 10, 18, 72);
+      g.fillStyle = 'rgba(255,255,255,0.95)';
+      g.fillRect(x + 18, 10, 4, 72);
+    }
+  }), 256 / 96],
+  // a bolted circular port: groove ring, six hex bolts, a centre cross
+  port: () => [canvas(192, 192, (g) => {
+    g.strokeStyle = 'rgba(40,44,50,0.9)';
+    g.lineWidth = 8;
+    g.beginPath();
+    g.arc(96, 96, 72, 0, Math.PI * 2);
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.95)';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(96, 96, 66, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = 'rgba(40,44,50,0.9)';
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      const cx = 96 + Math.cos(a) * 50;
+      const cy = 96 + Math.sin(a) * 50;
+      g.beginPath();
+      for (let j = 0; j < 6; j++) g.lineTo(cx + Math.cos((j / 6) * Math.PI * 2) * 7, cy + Math.sin((j / 6) * Math.PI * 2) * 7);
+      g.closePath();
+      g.fill();
+    }
+    g.fillRect(90, 70, 12, 52);
+    g.fillRect(70, 90, 52, 12);
+  }), 1],
+  // an angular panel line: runs, turns 45°, runs again (the chamfered breaks typical of mecha armor)
+  zline: (i = 0) => [canvas(512, 128, (g) => {
+    const G = 'rgba(40,44,50,0.9)';
+    const L = 'rgba(255,255,255,0.95)';
+    const pts = i % 2 ? [[8, 100], [220, 100], [290, 30], [504, 30]] : [[8, 30], [180, 30], [250, 100], [380, 100], [420, 60], [504, 60]];
+    for (const [c, w, dy] of [[G, 8, 0], [L, 3, 6]]) {
+      g.strokeStyle = c;
+      g.lineWidth = w;
+      g.beginPath();
+      pts.forEach(([x, y], k) => (k ? g.lineTo(x, y + dy) : g.moveTo(x, y + dy)));
+      g.stroke();
+    }
+    g.fillStyle = G;
+    g.beginPath();
+    g.arc(pts[pts.length - 1][0] - 4, pts[pts.length - 1][1], 7, 0, Math.PI * 2);
+    g.fill();
+  }), 4],
+  // a row of hex rivets
+  rivets: (i = 0) => [canvas(384, 64, (g) => {
+    const n = 6 + (i % 3);
+    for (let k = 0; k < n; k++) {
+      const cx = 24 + (k * 336) / (n - 1);
+      g.fillStyle = 'rgba(40,44,50,0.85)';
+      g.beginPath();
+      for (let j = 0; j < 6; j++) g.lineTo(cx + Math.cos((j / 6) * Math.PI * 2 + 0.5) * 13, 32 + Math.sin((j / 6) * Math.PI * 2 + 0.5) * 13);
+      g.closePath();
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.9)';
+      g.beginPath();
+      g.arc(cx - 3, 29, 3.5, 0, Math.PI * 2);
+      g.fill();
+    }
+  }), 6],
+  // chevron grooves (direction marks scribed in)
+  chevrons: () => [canvas(256, 96, (g) => {
+    for (let k = 0; k < 3; k++) {
+      const x = 30 + k * 70;
+      for (const [c, w, d] of [['rgba(40,44,50,0.9)', 9, 0], ['rgba(255,255,255,0.95)', 3, 6]]) {
+        g.strokeStyle = c;
+        g.lineWidth = w;
+        g.beginPath();
+        g.moveTo(x + d, 12);
+        g.lineTo(x + 40 + d, 48);
+        g.lineTo(x + d, 84);
+        g.stroke();
+      }
+    }
+  }), 256 / 96],
   // the luminous strips: tiny solid rectangles in fluorescent ink
   fluo: (i = 0) => [canvas(128, 32, (g) => {
     g.fillStyle = FLUO[i % FLUO.length];

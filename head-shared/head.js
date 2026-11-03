@@ -1528,9 +1528,63 @@ export function buildHead() {
       if (d[2] > 0.55 && Math.abs(d[0]) < 0.6 && d[1] < 0.45) continue;
       spots.push({key: 'fluo', v: i, dir: d, w: 0.09 + 0.04 * (i % 3), rot: i % 4 === 0 ? Math.PI / 2 : 0, depth: 0.05});
     }
+    // sci-fi engraving patterns over the shell
+    {
+      const KINDS = ['hatch', 'vents', 'zline', 'rivets', 'port', 'zline', 'chevrons', 'hatch', 'rivets', 'vents'];
+      const SIZE = {hatch: 0.36, vents: 0.24, zline: 0.6, rivets: 0.36, port: 0.2, chevrons: 0.24};
+      for (let i = 0; i < 46; i++) {
+        const t = (i + 0.5) / 46;
+        const yN = 0.92 - 1.65 * t;
+        const r = Math.sqrt(Math.max(0, 1 - yN * yN));
+        const ph = i * 2.399963 + 0.6;
+        const d = [Math.sin(ph) * r, yN, Math.cos(ph) * r];
+        if (d[2] > 0.55 && Math.abs(d[0]) < 0.6 && d[1] < 0.45) continue;
+        const key = KINDS[i % KINDS.length];
+        spots.push({key, v: i, dir: d, w: SIZE[key], depth: 0.05});
+      }
+    }
     // the larger marks a little finer
     for (const sp of spots) if (!['micro', 'tick', 'fluo', 'dots', 'emblem'].includes(sp.key)) sp.w *= 0.82;
     applyDecals(root, targets, spots);
+  }
+  // NT-D parts: decals laid in the Destroy pose on the faceplate, the opened mask halves' walls and cheek plates, the
+  // V-fin blades and the camera's crown block
+  {
+    update({d: 1});
+    root.updateMatrixWorld(true);
+    const shown = (o) => {
+      for (let q = o; q; q = q.parent) if (!q.visible) return false;
+      return true;
+    };
+    const targets = [];
+    root.traverse((o) => o.isMesh && o.material === M.white && shown(o) && targets.push(o));
+    const F = (x, y, z, dx, dy, dz) => [x + 4 * dx, y + 4 * dy, z + 4 * dz];
+    const sp = [];
+    for (const sx of [1, -1]) {
+      // V-fin blades: along each blade, rays from the front
+      for (const [f, key, w] of [[0.3, 'lines', 0.36], [0.45, 'micro', 0.2], [0.6, 'fluo', 0.12], [0.72, 'scribe', 0.4], [0.85, 'tick', 0.26], [0.38, 'rivets', 0.2]]) {
+        const L = 2.6 * f;
+        const x = sx * (0.3 + Math.sin(63 * D2R) * L);
+        const y = 1.2 + Math.cos(63 * D2R) * L;
+        sp.push({key, v: Math.round(f * 20), dir: [0, 0, 1], from: [x, y, 4], w, depth: 0.05, rot: -sx * (27 * D2R) * (key === 'fluo' ? 0 : 1)});
+      }
+      // mask side walls and cheek plates
+      sp.push({key: 'panel', dir: [sx, -0.3, 0.55], w: 0.4, depth: 0.05});
+      sp.push({key: 'vents', v: 1, dir: [sx, -0.6, 0.6], w: 0.14, depth: 0.05});
+      sp.push({key: 'fluo', v: 2 + (sx > 0 ? 0 : 1), dir: [sx, -0.1, 0.7], w: 0.1, depth: 0.05});
+      sp.push({key: 'zline', v: sx > 0 ? 0 : 1, dir: [sx, -0.45, 0.4], w: 0.36, depth: 0.05});
+      sp.push({key: 'micro', v: sx > 0 ? 1 : 2, dir: [sx, -0.8, 0.5], w: 0.17, depth: 0.05});
+      // faceplate flanks
+      sp.push({key: 'tick', v: 3, dir: [sx * 0.3, -0.5, 1], from: [sx * 0.25, -0.3, 4], w: 0.18, depth: 0.04, rot: Math.PI / 2});
+      sp.push({key: 'fluo', v: 3, dir: [0, 0, 1], from: [sx * 0.3, -0.62, 4], w: 0.07, depth: 0.04});
+    }
+    // faceplate centre and the crown block over the camera
+    sp.push({key: 'number', dir: [0, 0, 1], from: [0, -0.62, 4], w: 0.1, depth: 0.04, follow: false});
+    sp.push({key: 'hatch', v: 1, dir: [0, 0.2, 1], from: [0, 1.75, 4], w: 0.2, depth: 0.05, follow: false});
+    sp.push({key: 'lines', dir: [0, 0.2, 1], from: [0, 1.6, 4], w: 0.24, depth: 0.04, rot: Math.PI / 2});
+    void F;
+    applyDecals(root, targets, sp);
+    update({d: 0});
   }
   return {root, update, anchors, anchorWorld, materials: M, surf, hornParts};
 }
