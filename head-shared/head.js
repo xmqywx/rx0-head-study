@@ -935,7 +935,7 @@ export function buildHead() {
     for (let i = 0; i < 2; i++) {
       const [y0, w0, z0] = ROWS[i];
       const [y1, w1, z1] = ROWS[i + 1];
-      const R = 0.13; // the ridge stands this far in front of the edges: each half folds back to meet the mask halves
+      const R = 0.3; // the ridge: in the side view the faceplate's front stands ahead of the mask halves (sheet)
       const C0 = P(0, y0, z0 + R);
       const C1 = P(0, y1, z1 + R);
       for (const sx of [1, -1]) {
@@ -947,18 +947,22 @@ export function buildHead() {
       }
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.1 + 0.13 + (0.03 / 0.5) * y; // on the ridge
+    const faceZ = (y) => 1.1 + 0.3 + (0.03 / 0.5) * y; // on the ridge
     // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.2, -0.33, -0.46])
-      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.23 * Math.abs(x) + 0.012, 0.006, {mirror: true})), M.lens, false));
+      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.53 * Math.abs(x) + 0.014, 0.006, {mirror: true})), M.lens, false));
     const chin = mesh(
       geoOf((m) =>
         viewHull(m, {
           // hexagonal block hanging from the faceplate's point (sheet: ±.18, y −.70 … −1.25)
           // S-02: front a hexagon chamfered at the top, flat at the bottom; side a slab leaning forward 45°
-          front: [[-0.12, -0.72], [0.12, -0.72], [0.18, -0.82], [0.18, -1.12], [-0.18, -1.12], [-0.18, -0.82]],
-          side: [[0.92, -0.72], [1.12, -0.72], [1.45, -1.06], [1.42, -1.12], [1.24, -1.12]],
-          top: [[-0.18, 0.92], [0.18, 0.92], [0.18, 1.36], [0.1, 1.46], [-0.1, 1.46], [-0.18, 1.36]],
+          // the sheet's side view: a slim wedge hanging from under the faceplate's front, its front edge running down
+          // and a little forward to a point, its back edge sloping up under the face
+          // the sheet's side view: a wedge hanging from the faceplate's lower front, leaning forward as it drops,
+          // its tip just ahead of the faceplate's front
+          front: [[-0.1, -0.78], [0.1, -0.78], [0.15, -0.88], [0.15, -1.2], [-0.15, -1.2], [-0.15, -0.88]],
+          side: [[1.0, -0.78], [1.36, -0.84], [1.5, -1.12], [1.44, -1.22], [1.15, -1.05]], // hangs straight on from the faceplate's lower front
+          top: [[-0.15, 1.0], [0.15, 1.0], [0.15, 1.4], [0.08, 1.5], [-0.08, 1.5], [-0.15, 1.4]],
         }),
       ),
       M.chin,
