@@ -7,8 +7,10 @@ import {warmComposer} from 'teardown-kit/warm.js';
 import {readouts, STAGE_NAME, STAGE_ORDER, UNIT_M} from './kin.js';
 import {createHeadStage} from './stage.js';
 
-const W = 1600;
-const H = 900;
+// phones in portrait get a tall stage: the head on top, the two panels side by side below it
+const PORTRAIT = typeof innerWidth !== 'undefined' && innerHeight > innerWidth * 1.1;
+const W = PORTRAIT ? 620 : 1600;
+const H = PORTRAIT ? 1100 : 900;
 const IDLE = 25;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -48,7 +50,7 @@ const tourAt = (tt) => {
 };
 
 const CSS = `
-html,body{background:#eef0f0;overflow:hidden}
+html,body{background:#eef0f0;overflow:hidden;position:fixed;inset:0;width:100%;height:100%;overscroll-behavior:none;touch-action:none}
 #app{position:absolute!important;inset:auto!important;left:0;top:0;width:${W}px;height:${H}px;transform-origin:0 0;color:#1d2125}
 #gl{touch-action:none;cursor:grab}
 #gl.drag{cursor:grabbing}
@@ -81,10 +83,11 @@ html,body{background:#eef0f0;overflow:hidden}
 .sq em{font-style:normal;text-align:right}
 .views{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:5px;padding:7px;background:rgba(250,251,252,.9);border:1px solid #dfe4e7;border-radius:6px;pointer-events:auto}
 .views .bt{flex:none;width:72px}
-.chip{position:absolute;left:800px;top:28px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;height:24px;padding:0 12px;border:1px solid #e0e5e8;border-radius:4px;background:rgba(250,251,252,.95);font:700 9.5px 'JetBrains Mono';letter-spacing:1.3px;white-space:nowrap;cursor:pointer;pointer-events:auto}
+${PORTRAIT ? '.views{flex-wrap:wrap;width:580px;justify-content:center;bottom:12px}.views .bt{width:58px;font-size:9px}.hd b{font-size:17px}.ft{display:none}.pn{width:280px}.sq,.seqh{display:none}.chip{top:78px!important}.msg{top:108px!important}' : ''}
+.chip{position:absolute;left:${W / 2}px;top:28px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;height:24px;padding:0 12px;border:1px solid #e0e5e8;border-radius:4px;background:rgba(250,251,252,.95);font:700 9.5px 'JetBrains Mono';letter-spacing:1.3px;white-space:nowrap;cursor:pointer;pointer-events:auto}
 .chip i{display:block;width:6px;height:6px;border-radius:50%;background:#e8392f}
 .chip.on i{animation:blink 1.2s steps(2) infinite}
-.msg{position:absolute;left:800px;top:60px;transform:translateX(-50%);font:600 10.5px 'JetBrains Mono';letter-spacing:1.4px;color:#4b545b;white-space:nowrap}
+.msg{position:absolute;left:${W / 2}px;top:60px;transform:translateX(-50%);font:600 10.5px 'JetBrains Mono';letter-spacing:1.4px;color:#4b545b;white-space:nowrap}
 @keyframes blink{50%{opacity:.15}}
 svg.ld{position:absolute;inset:0;overflow:visible}
 .lab{position:absolute;padding:3px 7px;background:rgba(255,255,255,.94);border:1px solid #d3d9dd;border-radius:3px;font:700 10.5px 'JetBrains Mono';letter-spacing:.8px;white-space:nowrap;color:#1d2125;transform:translate(var(--ox),-50%)}
@@ -169,8 +172,8 @@ export function runLive() {
 
   // left panel: controls
   const L = el('div', 'pn', ui);
-  L.style.left = '34px';
-  L.style.top = '110px';
+  L.style.left = PORTRAIT ? '20px' : '34px';
+  L.style.top = PORTRAIT ? '610px' : '110px';
   el('h4', '', L, 'MODE');
   const modeRow = el('div', 'row', L);
   const bUni = el('div', 'bt', modeRow, 'UNICORN');
@@ -205,8 +208,8 @@ export function runLive() {
 
   // right panel: readouts and the sequence
   const R = el('div', 'pn', ui);
-  R.style.right = '34px';
-  R.style.top = '110px';
+  R.style.right = PORTRAIT ? '20px' : '34px';
+  R.style.top = PORTRAIT ? '610px' : '110px';
   el('h4', '', R, 'READOUT · FROM THE POSE');
   const RO = [
     ['hornAngle', 'HORN SPLIT', (v) => v.toFixed(1), '°'],
@@ -219,7 +222,7 @@ export function runLive() {
     const r = el('div', 'ro', R, `<i>${n}</i><b>0<small>${u}</small></b>`);
     return {k, f, u, b: r.querySelector('b')};
   });
-  el('h4', '', R, 'NT-D SEQUENCE');
+  el('h4', 'seqh', R, 'NT-D SEQUENCE');
   const SQ = STAGE_ORDER.map((k) => {
     const r = el('div', 'sq', R, `<span>${STAGE_NAME[k]}</span><div class="bar"><div></div></div><em>0</em>`);
     return {k, r, bar: r.querySelector('.bar div'), em: r.querySelector('em')};
@@ -326,20 +329,38 @@ export function runLive() {
 
   // orbit and zoom
   let drag = null;
+  const touches = new Map();
+  let pinch = 0;
   canvas.addEventListener('pointerdown', (e) => {
     takeover();
-    drag = {x: e.clientX, y: e.clientY};
+    touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    drag = touches.size === 1 ? {x: e.clientX, y: e.clientY} : null;
+    if (touches.size === 2) {
+      const [a, b] = [...touches.values()];
+      pinch = Math.hypot(a.x - b.x, a.y - b.y);
+    }
     canvas.setPointerCapture(e.pointerId);
     canvas.classList.add('drag');
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (touches.size === 2) {
+      lastInput = clock;
+      const [a, b] = [...touches.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch > 0) S.uZoom = clamp(S.uZoom * (pinch / d), 0.35, 2.2);
+      pinch = d;
+      return;
+    }
     if (!drag) return;
     lastInput = clock;
     S.uAz -= ((e.clientX - drag.x) / scale) * 0.006;
     S.uEl = clamp(S.uEl + ((e.clientY - drag.y) / scale) * 0.005, -0.5, 1.3);
     drag = {x: e.clientX, y: e.clientY};
   });
-  const endDrag = () => {
+  const endDrag = (e) => {
+    touches.delete(e.pointerId);
+    pinch = 0;
     drag = null;
     canvas.classList.remove('drag');
   };
@@ -417,13 +438,13 @@ export function runLive() {
     for (const side of [1, -1]) {
       const col = vis.filter((v) => v.side === side).sort((a, b) => a.y - b.y);
       for (let i = 1; i < col.length; i++) col[i].y = Math.max(col[i].y, col[i - 1].y + 26);
-      const over = col.length ? col[col.length - 1].y - (H - 110) : 0;
+      const over = col.length ? col[col.length - 1].y - ((PORTRAIT ? 620 : H) - 110) : 0;
       if (over > 0) for (const v of col) v.y -= over;
       for (let i = col.length - 2; i >= 0; i--) col[i].y = Math.min(col[i].y, col[i + 1].y - 26);
       for (const v of col) {
-        const lx = side > 0 ? Math.max(v.p[0] + 70, 1000) : Math.min(v.p[0] - 70, 600);
-        const x = clamp(lx, 300, 1300);
-        const ly = clamp(v.y, 100, H - 100);
+        const lx = side > 0 ? Math.max(v.p[0] + 70, W * 0.625) : Math.min(v.p[0] - 70, W * 0.375);
+        const x = clamp(lx, W * 0.19, W * 0.81);
+        const ly = clamp(v.y, 100, (PORTRAIT ? 620 : H) - 100);
         const {P} = v;
         P.div.style.display = 'block';
         P.div.style.left = `${x}px`;
@@ -477,7 +498,7 @@ export function runLive() {
     if (S.spin && !touring) S.uAz += dt * 0.25;
     S.viewT = Math.min(1, S.viewT + dt / 1.3);
     const base = mixCam(S.viewFrom, VIEWS[S.view], ease(S.viewT));
-    camNow = {...base, az: base.az + S.uAz + spinAz, el: clamp(base.el + S.uEl, -0.5, 1.5), d: base.d * S.uZoom * (1 + 0.25 * S.ex * (S.view === 'inside' ? 0 : 1))};
+    camNow = {...base, az: base.az + S.uAz + spinAz, el: clamp(base.el + S.uEl, -0.5, 1.5), d: base.d * S.uZoom * (PORTRAIT ? 1.55 : 1) * (1 + 0.25 * S.ex * (S.view === 'inside' ? 0 : 1)), sy: PORTRAIT ? -260 : 0};
     st.frame({d: S.d, explode: ease(S.ex), armor: S.armor, time: clock, ink: S.ink}, camNow);
 
     // panels
