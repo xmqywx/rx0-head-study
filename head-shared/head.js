@@ -807,11 +807,11 @@ export function buildHead() {
         return mesh(m2.geo(), mat, false);
       };
       maskRed = new THREE.Group();
-      maskRed.add(strip(0.0, 0.07, M.red), strip(0.022, 0.048, M.redHot));
+      maskRed.add(strip(0.0, 0.05, M.red), strip(0.017, 0.033, M.redHot));
       // and the L in the fold between the half's inner panel and outer facet, seen from the front
       {
-        const F = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]];
-        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.11);
+        const F = [[0.72, 0.1], [0.62, -0.45], [0.5, -1.0]]; // the fold between the outer facet and the side wall: the sheet's L
+        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.03);
         const m3 = new Mesher();
         const fl = (w0, w1) => {
           for (let k = 0; k < F.length - 1; k++) {
@@ -823,7 +823,7 @@ export function buildHead() {
             m3.quad(A0, bk(A0), bk(B0), B0, new V3(-s, 0, 0));
           }
         };
-        fl(-0.035, 0.035);
+        fl(-0.03, 0.02);
         maskFront = mesh(m3.geo(), M.red, false);
         pv.children[0].add(maskFront);
       }
@@ -858,6 +858,7 @@ export function buildHead() {
       // slide out and back, outer edge swinging behind the cheek guard, so only the inner face stays in view
       obj.position.add(new V3(s * MASK.slide * k, -MASK.drop * k, -MASK.back * k));
       obj.rotation.y = s * MASK.yaw * k; // turned slightly outward, staying in front of the cheek (outer layer)
+      obj.rotation.z = -s * MASK.roll * k; // the lower ends swing in to clamp the chin (front sheet)
       if (maskRed) maskRed.position.x = -s * 0.25 * (1 - k); // the frame plate slides in under the cheek until the half opens
       if (maskFront) maskFront.position.z = -0.3 * (1 - k);
     });
@@ -872,7 +873,8 @@ export function buildHead() {
     // fold back 135° toward the cheeks. The red chin is a wedge jutting forward and down (front corner z 1.33 at
     // y −1.2, bottom 1.26 at −1.46). All folded sheets / three-view solids, no flat slab.
     // Destroy sheet: ±.6 at the top edge (y −.05), tapering to ±.22 at the chin (y −.70)
-    const ROWS = [[-0.05, 0.58, 1.29], [-0.4, 0.44, 1.26], [-0.7, 0.22, 1.2]];
+    // recessed between the opened mask halves (Destroy side sheet: the halves' front edges stand proud of it)
+    const ROWS = [[-0.05, 0.42, 1.25], [-0.4, 0.34, 1.22], [-0.7, 0.18, 1.14]];
     const P = (x, y, z) => new V3(x, y, z);
     const facets = [];
     for (let i = 0; i < 2; i++) {
@@ -887,7 +889,7 @@ export function buildHead() {
       }
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.29 + (0.03 / 0.35) * (y + 0.05);
+    const faceZ = (y) => 1.25 + (0.03 / 0.35) * (y + 0.05);
     // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.2, -0.31, -0.42])
       g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) + 0.008, 0.006, {mirror: true})), M.lens, false));
@@ -895,8 +897,8 @@ export function buildHead() {
       geoOf((m) =>
         viewHull(m, {
           // hexagonal block hanging from the faceplate's point (sheet: ±.18, y −.70 … −1.25)
-          front: [[-0.17, -0.7], [0.17, -0.7], [0.17, -0.96], [0.1, -1.1], [-0.1, -1.1], [-0.17, -0.96]],
-          side: [[0.95, -0.7], [1.22, -0.7], [1.3, -0.9], [1.24, -1.1], [0.95, -1.1]],
+          front: [[-0.15, -0.62], [0.15, -0.62], [0.15, -0.94], [0.09, -1.08], [-0.09, -1.08], [-0.15, -0.94]],
+          side: [[0.9, -0.62], [1.08, -0.62], [1.3, -0.95], [1.3, -1.08], [0.9, -1.08]],
           top: [[-0.18, 0.95], [0.18, 0.95], [0.18, 1.2], [0.1, 1.3], [-0.1, 1.3], [-0.18, 1.2]],
         }),
       ),
