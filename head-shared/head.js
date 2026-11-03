@@ -991,9 +991,13 @@ export function buildHead() {
     // cheek, and the dark socket filling everything round it up to the brow (no red here; red only at the
     // cheek frame beyond x .85).
     const eyeFar = (x, y) => 1.1 + 0.1 * y - 0.3 * Math.abs(x);
-    const EYE = [[0.19, 0.17], [0.3, 0.11], [0.58, 0.18], [0.66, 0.27], [0.62, 0.32], [0.27, 0.25]];
-    const RIM = [[0.13, 0.17], [0.28, 0.07], [0.62, 0.13], [0.76, 0.27], [0.7, 0.37], [0.24, 0.31]];
-    g.add(mesh(geoOf((m) => prism(m, [[0.0, 0.0], [0.0, 0.34], [0.22, 0.36], [0.72, 0.42], [0.88, 0.44], [0.88, 0.04], [0.5, 0.02]], 'z', 0.7, (x, y) => eyeFar(x, y) - 0.03, 0.01, {mirror: true})), M.frame, false));
+    // extracted from the sheet's own pixels (bright green / dark-green rim, convex hull, 6 corners)
+    // a pentagon, as the sheet draws it: inner end, low point on the bottom, outer point, outer top, inner top
+    const EYE = [[0.212, 0.113], [0.475, 0.075], [0.675, 0.212], [0.65, 0.263], [0.25, 0.188]];
+    const RIM = [[0.15, 0.113], [0.463, 0.037], [0.75, 0.212], [0.7, 0.31], [0.212, 0.237]];
+    g.add(mesh(geoOf((m) => prism(m, [[0.12, 0.1], [0.46, 0.0], [0.82, 0.2], [0.82, 0.34], [0.62, 0.37], [0.18, 0.28]], 'z', 0.7, (x, y) => eyeFar(x, y) - 0.03, 0.01, {mirror: true})), M.frame, false)); // socket just round the rim
+    // the nose block's lower end between the eyes (sheet: grey, down to the sill)
+    g.add(mesh(geoOf((m) => prism(m, [[0.0, 0.02], [0.13, 0.04], [0.17, 0.13], [0.15, 0.32], [0.0, 0.32]], 'z', 0.7, (x, y) => eyeFar(x, y) + 0.02, 0.012, {mirror: true})), M.grey, false));
     g.add(mesh(geoOf((m) => prism(m, RIM, 'z', 0.8, (x, y) => eyeFar(x, y) - 0.008, 0.008, {mirror: true})), M.eyeRim, false));
     const eyes = mesh(geoOf((m) => prism(m, EYE, 'z', 0.8, eyeFar, 0.012, {mirror: true})), M.green, false);
     g.add(eyes);
@@ -1006,7 +1010,7 @@ export function buildHead() {
     g.add(bar);
     eyeBar = bar;
     // maroon sill under the eyes, from beside the nose out toward the cheek
-    g.add(mesh(geoOf((m) => prism(m, [[0.0, -0.07], [0.3, -0.05], [0.8, 0.04], [0.82, 0.16], [0.62, 0.12], [0.28, 0.07], [0.0, 0.06]], 'z', 0.8, (x, y) => eyeFar(x, y) + 0.03, 0.012, {mirror: true})), M.red, false)); // the red inner shell showing between the eyes and the mouth
+    g.add(mesh(geoOf((m) => prism(m, [[0.1, 0.07], [0.45, -0.02], [0.84, 0.17], [0.82, 0.23], [0.75, 0.205], [0.463, 0.03], [0.15, 0.105]], 'z', 0.8, (x, y) => eyeFar(x, y) + 0.01, 0.008, {mirror: true})), M.maroon, false)); // the thin sill under each eye
     add(g, new V3(0, 0.05, 1.25), (p) => (eyeBar.position.z = -0.35 * (1 - p.frame))); // the bars slide out in NT-D
     anchors.eyes = {obj: g, p: new V3(0.4, 0.0, 1.0)};
   }
