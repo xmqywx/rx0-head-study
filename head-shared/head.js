@@ -37,7 +37,8 @@ const FACE_SURF = (x, y) => {
 };
 // reference/parts/face.png (front view, centre x 263): x = (px − 263)/225, y = .15 − .00384 (py − 400)
 const FP = ([px, py]) => [(px - 263) / 225, 0.15 - 0.0034 * (py - 400)]; // the part sheet draws the face taller than the head sheet
-const POD_UP = 0.08; // the side sheet sets the pod low on the head, the front sheet higher; the side wins (it is the view people read)
+const POD_UP = 0.08;
+const POD_TUCK = {back: 0.55, in: 0.5, down: 0.05}; // into its bay under the rear side plates // the pod's rail travel in NT-D // the side sheet sets the pod low on the head, the front sheet higher; the side wins (it is the view people read)
 
 // helmet surface, read off the Unicorn sheet: [y, half width, front z, back z]
 const SHELL = [
@@ -739,6 +740,11 @@ export function buildHead() {
       foldedShell(m, [U([[0.006, -0.16], [0.6, 0.05], [0.47, -0.6], [0.19, -1.0], [0.006, -1.0]], 0.03)], T_FACE, {centre: new V3(0.3, -0.4, 0)});
       foldedShell(m, [U([[0.006, -1.02], [0.18, -1.02], [0.13, -1.22], [0.006, -1.22]], 0.03)], T_FACE, {centre: new V3(0.1, -1.0, 0)});
       foldedShell(m, [U([[0.61, 0.05], [0.72, 0.1], [0.57, -0.65], [0.28, -1.42], [0.14, -1.24], [0.2, -1.02], [0.48, -0.62]], 0.0)], T_FACE, {centre: new V3(0.35, -0.6, 0)});
+      // S-03 side wall: from the facet's outer edge (x .72 → .5) straight back to the red frame line (sheet: the
+      // wall's back edge runs z .62 at the top, .68 at y −.34, .9 at y −1.0, in the half's closed position)
+      const W = [[0.72, 0.1], [0.62, -0.45], [0.5, -1.0]].map(([x, y]) => new V3(x + 0.02, y, mask(Math.min(x, 0.74), y)));
+      const Wb = [[0.1, 0.62], [-0.34, 0.68], [-1.0, 0.9]].map(([y, z], i) => new V3(W[i].x - 0.03, y, z));
+      foldedShell(m, [[W[0], W[1], Wb[1], Wb[0]], [W[1], W[2], Wb[2], Wb[1]]], T_FACE, {centre: new V3(0.3, -0.45, 0.8)});
     });
     // the jaw behind the layers: shaded metal where face.png shows the dark recess between strip and cheek, and a
     // closed face so the neck never shows through
@@ -773,14 +779,18 @@ export function buildHead() {
     const pv = pivot(new V3(s * 0.74, -0.5, 1.0), mesh(shell, M.white)); // hinge on the outer edge
     pv.userData.noRed = true;
     let maskRed = null;
+    let maskFront = null;
     // the frame sheet that rides under this half: same outline, a little larger, just behind it, so the opened
     // half shows a red rim along its edges (Destroy sheet, "opened mask halves")
     {
       // the frame strip along the half's outer edge, traced from the Destroy sheet's red L: down from beside the eye
       // (x .74, y .1) to (.6, −.65), then diagonally in to the chin (.3, −1.4). A flat red strip with a hot core,
       // standing just outside the half's edge and behind it, so it shows as a glowing seam between mask and cheek.
-      const E = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]]; // the fold between the half's inner panel and outer facet
-      const at = ([x, y], dx) => new V3(sx(x) + dx * s, y, FACE_SURF(Math.min(x, 0.74), y) + 0.11); // proud of both facets so the whole L shows
+      // S-04 (Codex side-face sheet): a thin red plate along the side wall's back edge: a short upright prong above
+      // the eye line, down the edge, then stepping forward to the chin line; it lies in the wall's plane, just behind it
+      const E = [[0.4, 0.62], [0.1, 0.62], [-0.34, 0.68], [-1.0, 0.9], [-1.2, 1.02]]; // (y, z) along the wall's back edge
+      const wx = (y) => 0.72 + 0.02 - 0.03 + (y < 0.1 ? 0.22 * (y - 0.1) / 1.1 : 0);
+      const at = ([y, z], dz) => new V3(sx(wx(y)) + s * 0.012, y, z - dz); // dz: across the strip, toward the back
       const sx = (x) => s * x;
       const strip = (w0, w1, mat) => {
         const m2 = new Mesher();
@@ -788,17 +798,36 @@ export function buildHead() {
           const a = E[k];
           const b = E[k + 1];
           const A0 = at(a, w0), A1 = at(a, w1), B0 = at(b, w0), B1 = at(b, w1);
-          m2.quad(A0, B0, B1, A1, new V3(0, 0, 1));
-          const back = (v) => v.clone().add(new V3(0, 0, -0.05));
-          m2.quad(back(A0), back(A1), back(B1), back(B0), new V3(0, 0, -1));
-          m2.quad(A1, B1, back(B1), back(A1), new V3(s, 0, 0));
-          m2.quad(A0, back(A0), back(B0), B0, new V3(-s, 0, 0));
+          m2.quad(A0, B0, B1, A1, new V3(s, 0, 0));
+          const back = (v) => v.clone().add(new V3(-s * 0.04, 0, 0));
+          m2.quad(back(A0), back(A1), back(B1), back(B0), new V3(-s, 0, 0));
+          m2.quad(A1, B1, back(B1), back(A1), new V3(0, 0, -1));
+          m2.quad(A0, back(A0), back(B0), B0, new V3(0, 0, 1));
         }
         return mesh(m2.geo(), mat, false);
       };
       maskRed = new THREE.Group();
-      maskRed.add(strip(-0.035, 0.035, M.red), strip(-0.012, 0.012, M.redHot));
-      maskRed.children[1].position.z = 0.004;
+      maskRed.add(strip(0.0, 0.07, M.red), strip(0.022, 0.048, M.redHot));
+      // and the L in the fold between the half's inner panel and outer facet, seen from the front
+      {
+        const F = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]];
+        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.11);
+        const m3 = new Mesher();
+        const fl = (w0, w1) => {
+          for (let k = 0; k < F.length - 1; k++) {
+            const A0 = fa(F[k], w0), A1 = fa(F[k], w1), B0 = fa(F[k + 1], w0), B1 = fa(F[k + 1], w1);
+            const bk = (v) => v.clone().add(new V3(0, 0, -0.05));
+            m3.quad(A0, B0, B1, A1, new V3(0, 0, 1));
+            m3.quad(bk(A0), bk(A1), bk(B1), bk(B0), new V3(0, 0, -1));
+            m3.quad(A1, B1, bk(B1), bk(A1), new V3(s, 0, 0));
+            m3.quad(A0, bk(A0), bk(B0), B0, new V3(-s, 0, 0));
+          }
+        };
+        fl(-0.035, 0.035);
+        maskFront = mesh(m3.geo(), M.red, false);
+        pv.children[0].add(maskFront);
+      }
+      maskRed.children[1].position.x = s * 0.004;
       pv.children[0].add(maskRed);
     }
     // the hinge itself: three knuckles on a vertical axle with bearing rings, between mask and cheek guard
@@ -814,7 +843,7 @@ export function buildHead() {
         hg.add(kn, br);
       }
       hg.position.set(s * 0.74, -0.5, 0.97);
-      hg.position.z = 0.86; // behind the closed mask's edge
+      hg.position.z = 0.6; // deep behind the mask half, where it stays hidden when open too
       add(hg, new V3(s * 0.6, 0, 0.3), (p, obj) => (obj.visible = p.mask > 0.05));
     }
     const jawG = new THREE.Group();
@@ -829,7 +858,8 @@ export function buildHead() {
       // slide out and back, outer edge swinging behind the cheek guard, so only the inner face stays in view
       obj.position.add(new V3(s * MASK.slide * k, -MASK.drop * k, -MASK.back * k));
       obj.rotation.y = s * MASK.yaw * k; // turned slightly outward, staying in front of the cheek (outer layer)
-      if (maskRed) maskRed.position.z = -0.3 * (1 - k); // its frame sheet slides back inside until the half opens
+      if (maskRed) maskRed.position.x = -s * 0.25 * (1 - k); // the frame plate slides in under the cheek until the half opens
+      if (maskFront) maskFront.position.z = -0.3 * (1 - k);
     });
     if (s > 0) anchors.mask = {obj: pv, p: new V3(0.45, -0.55, 1.15)};
   }
@@ -994,7 +1024,7 @@ export function buildHead() {
       obj.position.y += 0.4 * (1 - p.cheek);
       obj.visible = p.cheek > 0.02;
     });
-    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (0.12 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.06 * p.cheek)));
+    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (-0.06 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.28 * p.cheek, -0.62 * p.cheek))); // back and down, behind the frame line
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }
 
@@ -1056,7 +1086,7 @@ export function buildHead() {
       pod.add(mesh(M2(geoOf((m) => foldedShell(m, facets, 0.05, {centre: new V3(0.6, -0.6 - POD_UP, -0.4)}))), M.white));
     }
     pod.userData.noRed = true;
-    add(pod, new V3(s * 1.6, 0.05, -0.1), (p, obj) => (obj.position.x += s * CROWN.spread * p.crown));
+    add(pod, new V3(s * 1.6, 0.05, -0.1), (p, obj) => obj.position.add(new V3(s * (CROWN.spread * p.crown - POD_TUCK.in * p.cheek), POD_TUCK.down * p.cheek, -POD_TUCK.back * p.cheek)));
     if (s > 0) anchors.pod = {obj: pod, p: new V3(1.37, 0.0, -0.3)};
     // cooling duct inside the pod
     const duct = new THREE.Group();
@@ -1066,7 +1096,7 @@ export function buildHead() {
       duct.add(mesh(M2(geoOf((m) => prism(m, [[0.15, yy + 0.03], [-0.5, yy + 0.03], [-0.5, yy - 0.02], [0.15, yy - 0.02]], 'x', 1.17, 1.22, 0.006))), M.frame, false));
     }
     duct.position.y = POD_UP;
-    add(duct, new V3(s * 0.9, 0, -0.1), (p, obj) => (obj.position.x += s * CROWN.spread * 0.7 * p.crown));
+    add(duct, new V3(s * 0.9, 0, -0.1), (p, obj) => obj.position.add(new V3(s * (CROWN.spread * 0.7 * p.crown - POD_TUCK.in * p.cheek), POD_TUCK.down * p.cheek, -POD_TUCK.back * p.cheek)));
     if (s > 0) anchors.duct = {obj: duct, p: new V3(1.2, -0.1, -0.2)};
     // vulcan: barrel through the temple, muzzle forward
     const vul = new THREE.Group();
