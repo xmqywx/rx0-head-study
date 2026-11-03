@@ -682,8 +682,8 @@ export function buildHead() {
     // mask's edge, running from beside the visor down and in toward the chin; its side plate leans inward toward the
     // jaw (x 1.0 at the top, .85 at the bottom), its lower front corner cut back to a point (side view)
     const geo = geoOf((m) => {
-      prismDense(m, [[0.76, 0.17], [1.02, 0.22], [0.97, -0.55], [0.66, -1.12], [0.47, -0.92], [0.66, -0.53]], 'z', (x, y) => FACE_SURF(x, y) - 0.2, (x, y) => FACE_SURF(x, y) - 0.035, 0.025, {seg: 0.08});
-      prismDense(m, [[0.55, 0.06], [0.98, 0.06], [0.98, -0.45], [0.95, -0.8], [0.86, -1.15], [0.74, -1.16], [0.6, -0.88], [0.52, -0.45]], 'x', (a, b) => 0.88 + 0.13 * b, (a, b) => 1.0 + 0.13 * b, 0.025, {seg: 0.12});
+      prismDense(m, [[0.76, 0.17], [1.02, 0.22], [1.0, -0.5], [0.72, -1.05], [0.5, -0.9], [0.66, -0.53]], 'z', (x, y) => FACE_SURF(x, y) - 0.45, (x, y) => FACE_SURF(x, y) - 0.035, 0.025, {seg: 0.08});
+
     });
     const g = new THREE.Group();
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white, 40));

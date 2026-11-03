@@ -104,8 +104,8 @@ export function createHeadStage({canvas}) {
   sun.shadow.mapSize.set(4096, 4096);
   sun.shadow.radius = 10;
   sun.shadow.blurSamples = 20;
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.01;
+  sun.shadow.bias = -0.0015;
+  sun.shadow.normalBias = 0.04;
   scene.add(sun, sun.target);
   const fill = new THREE.DirectionalLight('#dfe8ff', 0.6);
   fill.position.set(6, 2, -4);
