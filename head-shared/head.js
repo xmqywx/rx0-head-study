@@ -500,8 +500,8 @@ export function buildHead() {
     const b = P3(0.23, 0.7, 1.28);
     const f = P3(0, 0.35, 1.66);
     const c = P3(0.36, 0.5, 1.32);
-    const h = P3(0, 0.02, 1.46);
-    const g = P3(0.26, 0.15, 1.66 + 0.606 * (0.15 - 0.35) - 1.197 * 0.26);
+    const h = P3(0, 0.17, 1.46); // the beak's point rests on the visor's V
+    const g = P3(0.26, 0.24, 1.66 + 0.606 * (0.24 - 0.35) - 1.197 * 0.26);
     shell([[a, b, f], [b, c, f], [f, c, g, h]], new V3(0, 0.38, 0.9));
 
     // F-05: the forehead plate. main face z = 1.568 − .53x − .27y; the rim above the fold line turns back 45°
@@ -527,7 +527,8 @@ export function buildHead() {
     shell([outer, inner], new V3(0.4, 1.3, 0.2));
 
     // brow: the lower plate from the forehead plate down to the visor's top edge, beside the beak
-    const BROW = [[0.37, 0.49, 1.3], [0.68, 0.62, 1.1], [0.81, 0.92, 0.88], [0.97, 1.0, 0.7], [1.02, 0.55, 0.78], [0.92, 0.36, 0.95], [0.78, 0.27, 1.07], [0.4, 0.13, 1.25], [0.3, 0.15, 1.25]];
+    // its lower edge rests on the visor's top edge (.17 at the centre → .34 at x .69 → .42 at .92), leaving the band clear
+    const BROW = [[0.37, 0.49, 1.3], [0.68, 0.62, 1.1], [0.81, 0.92, 0.88], [0.97, 1.0, 0.7], [1.02, 0.55, 0.78], [0.92, 0.44, 0.95], [0.69, 0.36, 1.12], [0.4, 0.28, 1.27], [0.3, 0.26, 1.29]];
     shell([BROW.map(([x, y, z]) => P3(x, y, z))], new V3(0.55, 0.5, 0.3));
 
     add(browGroup, new V3(0, 0.2, 1.0), (p, obj) => obj.position.add(new V3(0, 0.06 * p.crown, 0.04 * p.crown)));
@@ -666,11 +667,14 @@ export function buildHead() {
     // face plane at its own height: the raised inner panel under the visor, the outer strip stepping back beside
     // it down to the chin
     const onFace = (pts, lift) => pts.map(FP).map(([x, y]) => new V3(x, y, mask(x, y) + lift));
+    // Outlines from the Unicorn sheet's front view at 3x (reference/grid/f3-front.png), which wins over the stylised
+    // face part sheet: a large upper panel under the visor down to the fold (y −.9), the lower V's front facet to
+    // the chin, and its side facet turning back toward the cheek; each a uniform sheet at its own height
+    const U = (pts, lift) => pts.map(([x, y]) => new V3(x, y, mask(x, y) + lift));
     const shell = mk((m) => {
-      const inner = onFace([[263, 505], [380, 458], [398, 462], [370, 545], [315, 612], [290, 688], [263, 688]], 0.04);
-      const strip = onFace([[400, 462], [420, 452], [396, 556], [345, 642], [305, 775], [292, 690], [317, 612], [372, 546]], 0.0);
-      foldedShell(m, [inner], T_FACE, {centre: new V3(0.15, -0.4, 0)});
-      foldedShell(m, [strip], T_FACE, {centre: new V3(0.3, -0.5, 0)});
+      foldedShell(m, [U([[0.006, -0.03], [0.69, 0.15], [0.64, -0.55], [0.45, -0.65], [0.19, -0.9], [0.006, -0.9]], 0.03)], T_FACE, {centre: new V3(0.3, -0.4, 0)});
+      foldedShell(m, [U([[0.006, -0.92], [0.18, -0.92], [0.14, -1.2], [0.006, -1.2]], 0.03)], T_FACE, {centre: new V3(0.1, -1.0, 0)});
+      foldedShell(m, [U([[0.46, -0.67], [0.66, -0.6], [0.24, -1.36], [0.16, -1.2], [0.2, -0.92]], 0.0)], T_FACE, {centre: new V3(0.35, -0.9, 0)});
     });
     // the jaw behind the layers: shaded metal where face.png shows the dark recess between strip and cheek, and a
     // closed face so the neck never shows through
@@ -683,9 +687,9 @@ export function buildHead() {
     if (s > 0) {
       // the chin block (face.png x 228–300, y 690–848): a front face with 135° bevels down both sides, its front
       // leaning forward at the bottom
-      const cz = (y) => 1.17 + 0.12 * (-1.03 - y);
-      const [cx0, cy0] = FP([300, 690]);
-      const [cx1, cy1] = FP([292, 848]);
+      const cz = (y) => 1.12 + 0.1 * (-1.22 - y);
+      const [cx0, cy0] = [0.13, -1.22];
+      const [cx1, cy1] = [0.13, -1.55];
       const fc = (x, y) => new V3(x, y, cz(y));
       const chin = geoOf((m) =>
         foldedShell(m, [
@@ -699,8 +703,9 @@ export function buildHead() {
       add(jg, new V3(0, -1.0, 0.9), (p, obj) => obj.position.add(new V3(0, 0.28 * p.mask, -0.42 * p.mask)));
     }
     // visor band (f3-front): centre .03 / −.13, outer end x .92 at .30 / .15, on the face surface
-    const visor = mk((m) => prismDense(m, [[0.006, 0.1], [0.006, -0.13], [0.7, 0.03], [0.92, 0.15], [0.92, 0.36], [0.78, 0.27], [0.4, 0.13]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
-    const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white), mesh(jaw, M.frameMid, false));
+    // visor band (f3-front at 3x): centre .17 / −.03, it rises to the outer end x .92 at .40 / .28, sitting just above the mask panel's top edge
+    const visor = mk((m) => prismDense(m, [[0.006, 0.17], [0.006, -0.03], [0.69, 0.15], [0.92, 0.28], [0.92, 0.42], [0.69, 0.34]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
+    const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white), mesh(jaw, M.grey, false));
     const vg = new THREE.Group();
     vg.add(mesh(visor, M.visor, false));
     // the visor retracts into the brow before the mask halves part
@@ -784,21 +789,16 @@ export function buildHead() {
     // side; both taper to one point low and forward (face.png 372, 800 → x .48, y −1.39). Each is a folded sheet:
     // the inner strip one facet stepped back from the face; the outer guard a front facet and a side facet meeting
     // at a 135° fold, its top capped.
+    // The cheek guard (Unicorn sheet front view): a broad plate beside the mask from the visor's outer end down to
+    // y −1.18, its face turning back toward the side; a narrower strip along the mask's lower edge; the plate's
+    // lower front corner cut to the point the side view shows. Uniform sheets, mirrored.
     const geo = geoOf((m) => {
-      const lean = (y) => 0.2 * Math.max(0, -0.3 - y); // the fangs reach forward as they drop
-      const at = (pts, back, turn = 0) =>
-        pts.map(FP).map(([x, y]) => new V3(x, y, FACE_SURF(Math.min(x, 0.74), y) - back - turn * Math.max(0, x - 0.82) + lean(y)));
-      const tip = FP([372, 800]);
-      const T3 = new V3(tip[0], tip[1], FACE_SURF(tip[0], tip[1]) + lean(tip[1]) - 0.04);
-      const inner = [...at([[422, 452], [442, 447], [428, 525]], 0.07), T3, ...at([[397, 560]], 0.07)];
-      foldedShell(m, [inner], 0.06, {centre: new V3(0.5, -0.5, 0)});
-      const front = [...at([[452, 425], [478, 420], [480, 520]], 0.03), T3, ...at([[442, 560], [450, 440]], 0.03)];
-      const sideP = at([[478, 420], [500, 470], [500, 520]], 0.03, 1.4);
-      const side = [front[1], sideP[0], sideP[1], sideP[2], T3, front[2]];
-      foldedShell(m, [front, side], 0.06, {centre: new V3(0.4, -0.5, 0.2)});
-      // the cap on the guard's top, above the visor's outer end (face.png 440–480, 330–380)
-      const cap = at([[445, 335], [470, 330], [482, 378], [452, 395]], 0.0);
-      foldedShell(m, [cap], 0.06, {centre: new V3(0.6, 0.3, 0)});
+      const back = (x, y, d) => new V3(x, y, FACE_SURF(Math.min(x, 0.7), y) - d - 0.9 * Math.max(0, x - 0.7));
+      const plate = [[0.7, 0.17], [0.93, 0.22], [0.93, -0.5], [0.86, -1.1], [0.62, -1.18], [0.67, -0.62]].map(([x, y]) => back(x, y, 0.02));
+      foldedShell(m, [plate], 0.07, {centre: new V3(0.5, -0.5, 0)});
+      const side = [[0.93, 0.22], [0.93, -0.5], [0.86, -1.1]].map(([x, y]) => back(x, y, 0.02));
+      const sideB = [side[2].clone().add(new V3(0.05, 0.05, -0.45)), side[1].clone().add(new V3(0.06, 0, -0.5)), side[0].clone().add(new V3(0.06, 0, -0.5))];
+      foldedShell(m, [[...side, ...sideB]], 0.07, {centre: new V3(0.5, -0.4, 0.6)});
     });
     const g = new THREE.Group();
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white, 40));
