@@ -13,15 +13,16 @@ import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 const V3 = THREE.Vector3;
 // the face's depth, measured off the Unicorn side view (centre line), with a cross curve back toward the cheeks
 // read at 3x off reference/grid/f3-side.png: upper face bulging 1.32 → 1.13, hollow at the fold, chin bulge 1.18, bottom 1.08
-const FACE_PROFILE = [[0.1, 1.33], [-0.12, 1.32], [-0.35, 1.27], [-0.57, 1.2], [-0.77, 1.14], [-0.88, 1.16], [-1.0, 1.21], [-1.12, 1.25], [-1.25, 1.27]];
+// the user's correction (side view): straight facets, not a curve — under the visor the face leans OUT to a fold at
+// y −.45, folds back IN to the hollow at −.8, the chin bulge leans out again to a fold at −1.0, then back in
+const FACE_PROFILE = [[0.1, 1.33], [-0.12, 1.31], [-0.45, 1.37], [-0.8, 1.13], [-1.0, 1.24], [-1.25, 1.1]];
 const faceZ = (y) => {
   const P = FACE_PROFILE;
   if (y >= P[0][0]) return P[0][1];
   for (let i = 0; i < P.length - 1; i++)
     if (y >= P[i + 1][0]) {
       const t = (y - P[i][0]) / (P[i + 1][0] - P[i][0]);
-      const s = t * t * (3 - 2 * t);
-      return P[i][1] + (P[i + 1][1] - P[i][1]) * s;
+      return P[i][1] + (P[i + 1][1] - P[i][1]) * t; // linear: flat facets between the folds
     }
   return P[P.length - 1][1];
 };
@@ -29,7 +30,7 @@ const faceZ = (y) => {
 const FACE_SURF = (x, y) => {
   const a = Math.abs(x);
   const o = Math.max(0, a - 0.2);
-  return faceZ(y) - 0.1 * a - 0.35 * o - 0.15 * o * o; // mask edge (x .74) ≈ z 1.02, cheek front (.92) ≈ .91: the side view's cheek edge
+  return faceZ(y) - 0.1 * a - 0.42 * o; // planar either side of the x = .2 fold; mask edge (x .74) ≈ z 1.02, cheek front (.92) ≈ .91: the side view's cheek edge
 };
 const POD_UP = 0.08; // the side sheet sets the pod low on the head, the front sheet higher; the side wins (it is the view people read)
 
@@ -621,14 +622,17 @@ export function buildHead() {
     const shell = mk((m) => {
       // read at 3x off f3-front.png: the upper panel down to the fold (centre y −.9, outer corner .64, −.53), the lower
       // V's front facet down to the chin, and its side facet turning back
-      prismDense(m, [[0.006, -0.13], [0.7, 0.03], [0.64, -0.53], [0.19, -0.9], [0.006, -0.9]], 'z', (x, y) => mask(x, y) - 0.2, mask, 0.022, {seg: 0.05});
-      prismDense(m, [[0.006, -0.92], [0.19, -0.92], [0.15, -1.2], [0.006, -1.2]], 'z', (x, y) => mask(x, y) - 0.2, (x, y) => mask(x, y) + 0.015, 0.02, {seg: 0.05});
-      prismDense(m, [[0.21, -0.91], [0.64, -0.555], [0.47, -0.66], [0.165, -1.2]], 'z', (x, y) => mask(x, y) - 0.2, (x, y) => mask(x, y) + 0.015, 0.02, {seg: 0.05});
+      // each panel is cut along the face's folds (y −.45, −.8, −1.0 and x .2), every piece a flat facet
+      const folds = [[0, 1, -0.45], [0, 1, -0.8], [0, 1, -1.0], [1, 0, 0.2]];
+      const near = (x, y) => mask(x, y) - 0.2;
+      prismSplit(m, [[0.006, -0.13], [0.7, 0.03], [0.64, -0.53], [0.19, -0.9], [0.006, -0.9]], 'z', near, (x, y) => mask(x, y), 0.012, folds, {gap: 0.004});
+      prismSplit(m, [[0.006, -0.92], [0.19, -0.92], [0.15, -1.2], [0.006, -1.2]], 'z', near, (x, y) => mask(x, y) + 0.015, 0.012, folds, {gap: 0.004});
+      prismSplit(m, [[0.21, -0.91], [0.64, -0.555], [0.47, -0.66], [0.165, -1.2]], 'z', near, (x, y) => mask(x, y) + 0.015, 0.012, folds, {gap: 0.004});
     });
     // one chin block under the V (not split): it bulges forward like the face above it and tucks up behind the
     // faceplate when the mask opens
     if (s > 0) {
-      const chin = geoOf((m) => prismDense(m, [[-0.135, -1.215], [0.135, -1.215], [0.135, -1.57], [-0.135, -1.57]], 'z', 0.8, (x, y) => 1.27 - 0.25 * (-1.215 - y) - 0.6 * x * x, 0.02, {seg: 0.05}));
+      const chin = geoOf((m) => prismSplit(m, [[-0.135, -1.215], [0.135, -1.215], [0.135, -1.57], [-0.135, -1.57]], 'z', 0.8, (x, y) => 1.12 - 0.3 * (-1.215 - y) - 0.3 * Math.abs(x), 0.012, [[1, 0, 0]], {gap: 0.004}));
       const jg = new THREE.Group();
       jg.add(mesh(chin, M.white, 40));
       add(jg, new V3(0, -1.0, 0.9), (p, obj) => obj.position.add(new V3(0, 0.28 * p.mask, -0.42 * p.mask)));
