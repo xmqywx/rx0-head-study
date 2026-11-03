@@ -784,8 +784,18 @@ export function buildHead() {
     win(630, 671, 566, 616, 5, true);
     // the little mark on the frame's top back corner
     pod.add(mesh(M2(geoOf((m) => prism(m, T([[668, 556], [678, 556], [678, 560], [668, 560]]), 'x', 1.3, 1.336, 0.002))), M.lens, false));
-    // bracket under the front of the pod, down to the jaw
-    pod.add(mesh(M2(geoOf((m) => prism(m, T([[578, 628], [600, 628], [604, 660], [596, 684], [580, 684]]), 'x', 0.98, 1.2, 0.02))), M.white));
+    // bracket under the front of the pod, down to the jaw: a thin folded sheet, not a slab. Front view (grid/
+    // jaw-front.png): a strip x ~.95–1.19 whose outer edge runs down and slightly out, then folds back in toward the
+    // jaw below y −.65; side view (jaw-side.png): z ~.1–.35. Upper facet faces out and forward (45°), the lower facet
+    // turns in ~40°. Pod-local y = sheet y − POD_UP.
+    {
+      const u = (x, y, z) => new V3(x, y - POD_UP, z);
+      const top = [u(0.97, -0.3, 0.36), u(1.17, -0.3, 0.12)];
+      const mid = [u(1.0, -0.64, 0.36), u(1.2, -0.64, 0.1)];
+      const bot = [u(0.92, -0.84, 0.32), u(1.06, -0.84, 0.14)];
+      const facets = [[top[0], mid[0], mid[1], top[1]], [mid[0], bot[0], bot[1], mid[1]]];
+      pod.add(mesh(M2(geoOf((m) => foldedShell(m, facets, 0.05, {centre: new V3(0.6, -0.6 - POD_UP, -0.4)}))), M.white));
+    }
     add(pod, new V3(s * 1.6, 0.05, -0.1), (p, obj) => (obj.position.x += s * CROWN.spread * p.crown));
     if (s > 0) anchors.pod = {obj: pod, p: new V3(1.37, 0.0, -0.3)};
     // cooling duct inside the pod
