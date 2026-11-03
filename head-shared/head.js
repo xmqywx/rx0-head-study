@@ -425,15 +425,42 @@ export function buildHead() {
       return new V3(0, a0[0] - a1[0], a1[1] - a0[1]).normalize().negate().multiplyScalar(-1);
     });
     for (const u of up) if (u.y < 0) u.negate();
-    const cap = geoOf((m) => sweep(m, path, up, (i) => {
-      const w = Wd[i];
-      return [[-w, -0.16], [w, -0.16], [w, 0.03], [w * 0.7, 0.11], [-w * 0.7, 0.11], [-w, 0.03]];
+    // the spine (Destroy top view): a wide band in four blocks with gaps between, a red frame band under it that
+    // shows along both edges once the side plates part in NT-D
+    const SEGS = [[0, 1], [1, 2], [2, 3], [3, 5]];
+    // each block is a convex solid through its section corners (side walls, chamfers and top all closed)
+    const cap = geoOf((m) => {
+      for (const [a, b] of SEGS) {
+        const pts = [];
+        for (let i = a; i <= b; i++) {
+          let c = path[i].clone();
+          if (i === a) c = c.lerp(path[Math.min(i + 1, b)], 0.06);
+          if (i === b) c = c.lerp(path[Math.max(i - 1, a)], 0.06);
+          const u = up[i];
+          const t = path[Math.min(i + 1, path.length - 1)].clone().sub(path[Math.max(i - 1, 0)]).normalize();
+          const l = new V3().crossVectors(t, u).normalize();
+          const w = Wd[i] * 1.3;
+          for (const [x, h] of [[-w, -0.16], [w, -0.16], [w, 0.03], [w * 0.72, 0.11], [-w * 0.72, 0.11], [-w, 0.03]]) pts.push(c.clone().addScaledVector(l, x).addScaledVector(u, h));
+        }
+        const hull = new ConvexGeometry(pts);
+        const pa = hull.attributes.position.array;
+        for (let i = 0; i < pa.length; i += 9) {
+          const v = [0, 3, 6].map((o) => new V3(pa[i + o], pa[i + o + 1], pa[i + o + 2]));
+          m.tri(v[0], v[1], v[2]); // ConvexGeometry already winds every face outward
+        }
+      }
+    });
+    const spineRed = geoOf((m) => sweep(m, path.map((v, i) => v.clone().addScaledVector(up[i], -0.05)), up, (i) => {
+      const w = Wd[i] * 1.3 + 0.07;
+      return [[-w, -0.12], [w, -0.12], [w, -0.04], [-w, -0.04]];
     }));
     const crest = geoOf((m) => sweep(m, path.slice(2, 5), up.slice(2, 5), () => [[-0.17, 0.08], [0.17, 0.08], [0.17, 0.16], [0.12, 0.2], [-0.12, 0.2], [-0.17, 0.16]]));
     const lip = geoOf((m) => prism(m, [[-1.08, 1.56], [-1.44, 1.36], [-1.5, 1.48], [-1.2, 1.68]], 'x', -0.24, 0.24, 0.025));
     const vent = geoOf((m) => prism(m, [[-1.24, 1.55], [-1.42, 1.44], [-1.44, 1.5], [-1.26, 1.6]], 'x', -0.13, 0.13, 0.008));
     const g = new THREE.Group();
     g.add(mesh(cap, M.white), mesh(crest, M.white), mesh(lip, M.white));
+    const spineR = mesh(spineRed, M.red, false);
+    g.add(spineR);
     const v = mesh(vent, M.lens, false);
     v.scale.set(1.05, 1, 1);
     v.position.set(0, 0.012, -0.005);
@@ -446,7 +473,10 @@ export function buildHead() {
       front: [[-0.16, 1.31], [0.16, 1.31], [0.21, 1.38], [0.22, 1.72], [0.15, 1.84], [-0.15, 1.84], [-0.22, 1.72], [-0.21, 1.38]],
       side: [[0.5, 1.31], [0.84, 1.31], [0.86, 1.4], [0.78, 1.84], [0.5, 1.84]],
     })), M.white));
-    add(g, new V3(0, 1.3, 0), (p, obj) => obj.position.add(new V3(0, -0.12 * p.crown, 0.42 * p.crown)));
+    add(g, new V3(0, 1.3, 0), (p, obj) => {
+      obj.position.add(new V3(0, 0.06 * p.crown, 0.22 * p.crown)); // forward along the top; not lower, or it sinks into the crown plates
+      spineR.position.y = -0.14 * (1 - p.crown); // the frame band rises under the spine's edges in NT-D
+    });
     anchors.crown = {obj: g, p: new V3(0.35, 1.95, -0.3)};
   }
 
@@ -954,13 +984,13 @@ export function buildHead() {
     // Destroy sheet: ±.6 at the top edge (y −.05), tapering to ±.22 at the chin (y −.70)
     // recessed between the opened mask halves (Destroy side sheet: the halves' front edges stand proud of it)
     // taller, as the sheet draws it: from the eye sill (y 0) down to the chin (−.88), edges tucked under the mask halves
-    const ROWS = [[0.0, 0.58, 1.1], [-0.5, 0.5, 1.12], [-0.75, 0.34, 1.2]]; // the lower part comes forward to wrap the chin // inside the mask halves' U (S-03), not in front of it
+    const ROWS = [[0.0, 0.58, 1.06], [-0.5, 0.5, 1.04], [-0.75, 0.34, 1.02]]; // set back; no bump at the chin // inside the mask halves' U (S-03), not in front of it
     const P = (x, y, z) => new V3(x, y, z);
     const facets = [];
     for (let i = 0; i < 2; i++) {
       const [y0, w0, z0] = ROWS[i];
       const [y1, w1, z1] = ROWS[i + 1];
-      const R = 0.3; // the ridge: in the side view the faceplate's front stands ahead of the mask halves (sheet)
+      const R = 0.22; // the ridge
       const C0 = P(0, y0, z0 + R);
       const C1 = P(0, y1, z1 + R);
       for (const sx of [1, -1]) {
@@ -975,8 +1005,8 @@ export function buildHead() {
     for (const sx of [1, -1]) {
       const Q = (x, y, z) => P(sx * x, y, z);
       // in front of the mask halves' inner edges (sheet front view: the shield's sides run down beside the chin)
-      facets.push([Q(0.15, -0.75, 1.38), Q(0.34, -0.75, 1.2), Q(0.3, -1.06, 1.18), Q(0.15, -1.06, 1.32)]);
-      facets.push([Q(0.15, -1.06, 1.32), Q(0.3, -1.06, 1.18), Q(0.24, -1.16, 1.16), Q(0.15, -1.16, 1.28)]);
+      facets.push([Q(0.15, -0.75, 1.17), Q(0.34, -0.75, 1.02), Q(0.3, -1.06, 1.0), Q(0.15, -1.06, 1.12)]);
+      facets.push([Q(0.15, -1.06, 1.12), Q(0.3, -1.06, 1.0), Q(0.24, -1.16, 0.98), Q(0.15, -1.16, 1.08)]);
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
     const faceZ = (y) => {
@@ -984,11 +1014,11 @@ export function buildHead() {
       const i = y > ROWS[1][0] ? 0 : 1;
       const [y0, , z0] = ROWS[i];
       const [y1, , z1] = ROWS[i + 1];
-      return z0 + ((z1 - z0) * (y - y0)) / (y1 - y0) + 0.3;
+      return z0 + ((z1 - z0) * (y - y0)) / (y1 - y0) + 0.22;
     };
     // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.2, -0.33, -0.46])
-      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.53 * Math.abs(x) + 0.014, 0.006, {mirror: true})), M.lens, false));
+      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.4 * Math.abs(x) + 0.014, 0.006, {mirror: true})), M.lens, false));
     const chin = mesh(
       geoOf((m) =>
         viewHull(m, {
@@ -999,8 +1029,8 @@ export function buildHead() {
           // the sheet's side view: a wedge hanging from the faceplate's lower front, leaning forward as it drops,
           // its tip just ahead of the faceplate's front
           front: [[-0.1, -0.78], [0.1, -0.78], [0.15, -0.88], [0.15, -1.2], [-0.15, -1.2], [-0.15, -0.88]],
-          side: [[1.0, -0.78], [1.36, -0.84], [1.5, -1.12], [1.44, -1.22], [1.15, -1.05]], // hangs straight on from the faceplate's lower front
-          top: [[-0.15, 1.0], [0.15, 1.0], [0.15, 1.4], [0.08, 1.5], [-0.08, 1.5], [-0.15, 1.4]],
+          side: [[0.88, -0.78], [1.2, -0.84], [1.34, -1.12], [1.28, -1.22], [1.0, -1.05]], // hangs straight on from the faceplate's lower front
+          top: [[-0.15, 0.88], [0.15, 0.88], [0.15, 1.24], [0.08, 1.34], [-0.08, 1.34], [-0.15, 1.24]],
         }),
       ),
       M.chin,
