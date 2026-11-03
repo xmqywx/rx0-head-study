@@ -33,7 +33,7 @@ export const raw = (d, k) => clamp01((d - STAGES[k][0]) / (STAGES[k][1] - STAGES
 export const HORN = {root: [0, 1.45, 0.75], tip: [0, 4.57, 1.5], split: 63, spread: 0.3, drop: 0.08, sink: 0.25, pitch: 0} // Destroy sheet: fins rooted at the forehead column top, tips at x ±2.6, y 2.5;
 HORN.len = Math.hypot(HORN.tip[1] - HORN.root[1], HORN.tip[2] - HORN.root[2]);
 HORN.partScale = HORN.len / 3.2; // reference/parts/horn.png draws a 3.2-unit blade at 200 px per unit
-export const MASK = {slide: 0.34, back: 0.1, yaw: 0.0, drop: 0.03, roll: 0.2}; // no outward yaw: the side wall stays flat against the face // opened halves flank the mouth, their front edges just behind the faceplate's vents (Destroy side sheet) // opened halves stay forward and flank the mouth (Destroy sheet: the faceplate sits recessed between them) // opened halves step back behind the faceplate's sides (Destroy sheet layering) // opened halves step back behind the faceplate's sides (Destroy sheet layering) // opened halves step back behind the faceplate's sides (Destroy sheet layering) // halves swing open like doors on their outer edge (Destroy sheet: they end up as the side panels)
+export const MASK = {slide: 0.27, back: 0.14, yaw: -0.12, drop: 0.03, roll: 0.14}; // NT-D: halves slide out, step back, roll their lower ends in to clamp the mouth, outer edge turned in to follow the head's contour
 export const CROWN = {lift: 0.04, rise: 0.03, spread: 0.06}; // spread: the side armor opens outward, the Destroy head is wider
 export const FRAME_RISE = 0.17; // in NT-D the frame rises flush into the seams (plates only lift .06) // the psycho-frame pushes out into the opened seams
 export const FIN = {rise: 0.36};
