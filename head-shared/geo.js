@@ -567,3 +567,104 @@ export function prismDense(m, poly, axis, near, far, bevel = 0.03, {seg = 0.2, m
   }
   return m;
 }
+
+/**
+ * A folded sheet of uniform thickness t — how the kit's armor is made. facets: [[V3, ...], ...], each a (nearly)
+ * planar outer polygon, sharing edges along the folds. The inner skin is the outer skin offset by t: at every vertex
+ * the offset satisfies n_i · d = −t for all facets meeting there (a mitred fold, exact for up to three planes), so
+ * the two skins meet cleanly along folds. Open edges (used by one facet) get a wall t tall. Facets are oriented
+ * outward from `centre` (default: the mean vertex). Returns m.
+ */
+export function foldedShell(m, facets, t = 0.07, {centre} = {}) {
+  const all = facets.flat();
+  const C = centre || all.reduce((a, v) => a.add(v), new V3()).multiplyScalar(1 / all.length);
+  const newell = (P) => {
+    const n = new V3();
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i];
+      const b = P[(i + 1) % P.length];
+      n.x += (a.y - b.y) * (a.z + b.z);
+      n.y += (a.z - b.z) * (a.x + b.x);
+      n.z += (a.x - b.x) * (a.y + b.y);
+    }
+    return n.normalize();
+  };
+  const F = facets.map((poly) => {
+    const c = poly.reduce((a, v) => a.add(v), new V3()).multiplyScalar(1 / poly.length);
+    let n = newell(poly);
+    if (n.dot(c.clone().sub(C)) < 0) {
+      n = n.negate();
+      poly = poly.slice().reverse();
+    }
+    return {poly, n, c};
+  });
+  const key = (v) => `${v.x.toFixed(4)},${v.y.toFixed(4)},${v.z.toFixed(4)}`;
+  const vn = new Map();
+  for (const f of F)
+    for (const v of f.poly) {
+      const k = key(v);
+      if (!vn.has(k)) vn.set(k, {v, ns: []});
+      vn.get(k).ns.push(f.n);
+    }
+  // offset per vertex: least squares on n_i · d = −t (min-norm through a small ridge term)
+  const inner = new Map();
+  const M = new THREE.Matrix3();
+  for (const [k, {v, ns}] of vn) {
+    const e = 1e-4;
+    let [a, b, c, d, f, g] = [e, 0, 0, e, 0, e];
+    const r = new V3();
+    for (const n of ns) {
+      a += n.x * n.x;
+      b += n.x * n.y;
+      c += n.x * n.z;
+      d += n.y * n.y;
+      f += n.y * n.z;
+      g += n.z * n.z;
+      r.add(n);
+    }
+    M.set(a, b, c, b, d, f, c, f, g);
+    const dv = r.multiplyScalar(-t).applyMatrix3(M.invert());
+    if (dv.length() > 3 * t) dv.setLength(3 * t); // a nearly folded-flat fold would otherwise shoot off
+    inner.set(k, v.clone().add(dv));
+  }
+  const edges = new Map();
+  const ek = (p, q) => [key(p), key(q)].sort().join('|');
+  for (const f of F)
+    for (let i = 0; i < f.poly.length; i++) edges.set(ek(f.poly[i], f.poly[(i + 1) % f.poly.length]), (edges.get(ek(f.poly[i], f.poly[(i + 1) % f.poly.length])) || 0) + 1);
+  for (const f of F) {
+    const {poly, n, c} = f;
+    // triangulate in the plane's dominant projection (handles concave outlines)
+    const ax = Math.abs(n.x) > Math.abs(n.y) && Math.abs(n.x) > Math.abs(n.z) ? 'x' : Math.abs(n.y) > Math.abs(n.z) ? 'y' : 'z';
+    const P2 = poly.map((v) => (ax === 'x' ? new THREE.Vector2(v.y, v.z) : ax === 'y' ? new THREE.Vector2(v.z, v.x) : new THREE.Vector2(v.x, v.y)));
+    const tris = poly.length === 3 ? [[0, 1, 2]] : THREE.ShapeUtils.triangulateShape(P2, []);
+    for (const [i, j, k] of tris) {
+      m.tri(poly[i], poly[j], poly[k], n);
+      m.tri(inner.get(key(poly[i])), inner.get(key(poly[j])), inner.get(key(poly[k])), n.clone().negate());
+    }
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      if (edges.get(ek(a, b)) !== 1) continue;
+      const w = new V3().subVectors(b, a).cross(n);
+      const mid = a.clone().add(b).multiplyScalar(0.5);
+      if (w.dot(mid.clone().sub(c)) < 0) w.negate();
+      m.quad(a, b, inner.get(key(b)), inner.get(key(a)), w);
+    }
+  }
+  return m;
+}
+
+/** a flat armor panel: outline [[x, y], ...] lifted onto z = plane(x, y), inset by gap/2, as a folded shell of one facet */
+export function planarPanel(m, outline, plane, {t = 0.07, gap = 0.024, mirror = false} = {}) {
+  let P = outline.map((p) => [...p]);
+  if (area2(P) < 0) P.reverse();
+  const Q = gap > 0 ? inset(P, gap / 2) : P;
+  const poly = Q.map(([x, y]) => new V3(x, y, plane(x, y)));
+  const c = poly.reduce((a, v) => a.add(v), new V3()).multiplyScalar(1 / poly.length);
+  for (const sx of mirror ? [1, -1] : [1]) {
+    const f = poly.map((v) => new V3(sx * v.x, v.y, v.z));
+    const cc = new V3(sx * c.x, c.y, c.z - 1); // behind the panel, so its outer face is the lifted side
+    foldedShell(m, [f], t, {centre: cc});
+  }
+  return m;
+}
