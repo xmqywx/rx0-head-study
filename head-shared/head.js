@@ -9,6 +9,7 @@ import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, prismSplit, shellPla
 import {ConvexGeometry} from 'three/addons/geometries/ConvexGeometry.js';
 import {mergeGeometries, toCreasedNormals} from 'three/addons/utils/BufferGeometryUtils.js';
 import {applyDecals} from './decals.js';
+import {buildInterior, interiorMaterials} from './interior.js';
 import {bearing, bracket, cables, clevis, gear, linkArm, linkPlate, motor, piston, place, rib, socket} from './mechparts.js';
 const merge3 = (list) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
@@ -152,121 +153,11 @@ export function buildHead() {
   // the inner skin the frame plates retract behind (hidden when the armor is ghosted or exploded, to show the machine)
   const innerSkin = mesh(loftBody(core, [-1.2, -0.85, -0.55, -0.1, 0.3, 0.65, 0.95, 1.2, 1.4, 1.58, 1.72, 1.84], 24), M.frame, false);
   root.add(innerSkin);
-  // The interior, built the way a teardown reads (a dozen standard parts, repeated): a central stack of turned levels
-  // — washers, gear discs, bearing races, torus seals — following the head's profile, each ringed by instanced
-  // satellites (capsules, hex bolts, ball joints, radial pistons), tied by vertical tie rods. In the explode the levels
-  // fan apart along the stack and their satellites spread outward.
+  // the interior: working systems (interior.js) — neck yaw ring, spine and bulkheads, sensor bench, processor,
+  // cooling, power, horn drive, harness — each its own explode part, moving parts driven from the pose
   let curExplode = 0;
-  const interiorLevels = [];
-  {
-    const UPV = new V3(0, 1, 0);
-    const lathe = (pts) => {
-      const g = new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 36);
-      g.deleteAttribute('uv');
-      return g;
-    };
-    const LEVEL = {
-      washer: (R) => lathe([[R * 0.45, -0.03], [R, -0.03], [R, 0.0], [R * 0.93, 0.0], [R * 0.93, 0.01], [R, 0.01], [R, 0.03], [R * 0.45, 0.03], [R * 0.45, -0.03]]),
-      bearing: (R) => lathe([[R * 0.3, -0.05], [R * 0.82, -0.05], [R * 0.82, -0.02], [R, -0.02], [R, 0.02], [R * 0.82, 0.02], [R * 0.82, 0.05], [R * 0.3, 0.05], [R * 0.3, -0.05]]),
-      seal: (R) => {
-        const g = new THREE.TorusGeometry(R * 0.86, 0.035, 8, 40);
-        g.rotateX(Math.PI / 2);
-        g.deleteAttribute('uv');
-        return g;
-      },
-      gear: (R) => {
-        const g = gear(R, Math.max(14, Math.round(R * 40)), 0.06);
-        g.rotateX(Math.PI / 2);
-        return g;
-      },
-    };
-    const TYPES = ['washer', 'gear', 'bearing', 'seal', 'washer', 'bearing', 'gear', 'seal'];
-    const MATS = {washer: M.frameMid, gear: M.steel, bearing: M.frame, seal: M.frame};
-    // satellite parts (unit size, instanced)
-    const SAT = {
-      capsule: (() => {
-        const g = new THREE.CapsuleGeometry(0.03, 0.08, 4, 8);
-        g.rotateZ(Math.PI / 2);
-        return g;
-      })(),
-      bolt: (() => {
-        const g = new THREE.CylinderGeometry(0.035, 0.035, 0.05, 6);
-        return g;
-      })(),
-      ball: new THREE.IcosahedronGeometry(0.035, 1),
-      spoke: (() => {
-        const g = new THREE.CylinderGeometry(0.018, 0.018, 1, 8);
-        g.rotateZ(Math.PI / 2);
-        g.translate(0.5, 0, 0);
-        return g;
-      })(),
-    };
-    const SATMAT = {capsule: M.steel, bolt: M.frame, ball: M.steel, spoke: M.frameMid};
-    const ys = [];
-    for (let y = -1.12; y <= 1.72; y += 0.155) ys.push(y);
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const sc = new V3();
-    ys.forEach((y, i) => {
-      const [hw, zf, zb] = core.at(y);
-      const zc = (zf + zb) / 2 - 0.05;
-      const rMax = Math.min(hw, (zf - zb) / 2) * 0.88;
-      const R = rMax * (i % 3 === 1 ? 0.62 : i % 3 === 2 ? 0.78 : 0.7);
-      const type = TYPES[i % TYPES.length];
-      const lev = new THREE.Group();
-      const ring = mesh(LEVEL[type](R), MATS[type], false);
-      ring.position.set(0, y, zc);
-      if (type === 'gear') ring.position.y -= 0.03;
-      lev.add(ring);
-      // satellites round the ring
-      const kind = ['capsule', 'bolt', 'ball', 'bolt'][i % 4];
-      const n = Math.max(8, Math.round(R * 22));
-      const sats = new THREE.InstancedMesh(SAT[kind], SATMAT[kind], n);
-      sats.castShadow = sats.receiveShadow = true;
-      const satR = R + 0.05;
-      const pose = (spread) => {
-        for (let k = 0; k < n; k++) {
-          const a = (k / n) * Math.PI * 2 + i * 0.3;
-          const r = satR + spread;
-          q.setFromAxisAngle(UPV, -a);
-          m4.compose(new V3(Math.cos(a) * r, y + 0.0, zc + Math.sin(a) * r), q, sc.set(1, 1, 1));
-          sats.setMatrixAt(k, m4);
-        }
-        sats.instanceMatrix.needsUpdate = true;
-      };
-      pose(0);
-      lev.add(sats);
-      // radial pistons on every third level, out toward the skin
-      let spokes = null;
-      if (i % 3 === 0) {
-        const ns = 6;
-        spokes = new THREE.InstancedMesh(SAT.spoke, SATMAT.spoke, ns);
-        spokes.castShadow = true;
-        for (let k = 0; k < ns; k++) {
-          const a = (k / ns) * Math.PI * 2 + 0.26;
-          q.setFromAxisAngle(UPV, -a);
-          m4.compose(new V3(Math.cos(a) * R, y, zc + Math.sin(a) * R), q, sc.set(Math.max(0.05, rMax * 1.08 - R), 1, 1));
-          spokes.setMatrixAt(k, m4);
-        }
-        lev.add(spokes);
-      }
-      const yMid = 0.3;
-      const part = add(lev, new V3(0, (y - yMid) * 1.1, 0), () => pose(0.45 * curExplode));
-      part.radial = false;
-      interiorLevels.push(part);
-    });
-    // the central core and six tie rods through the stack
-    const core0 = mesh(lathe([[0.001, -1.2], [0.12, -1.2], [0.12, 1.78], [0.001, 1.78]]), M.frame, false);
-    core0.position.z = -0.1;
-    skull.add(core0);
-    const rods = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.02, 0.02, 2.9, 8), M.steel, 6);
-    for (let k = 0; k < 6; k++) {
-      const a = (k / 6) * Math.PI * 2;
-      m4.compose(new V3(Math.cos(a) * 0.3, 0.3, -0.1 + Math.sin(a) * 0.3), q.identity(), sc.set(1, 1, 1));
-      rods.setMatrixAt(k, m4);
-    }
-    skull.add(rods);
-  }
+  const IM = interiorMaterials();
+  const interiorUpdate = buildInterior({add, mesh: (g, m) => mesh(g, m, false), M: IM});
   {
     const dark = [];
     const mid = [];
@@ -1445,6 +1336,7 @@ export function buildHead() {
   const update = ({d = 0, explode = 0, armor = 1, time = 0, ink = true}) => {
     const p = pose(d);
     curExplode = explode;
+    interiorUpdate(p, time);
     for (const part of parts) {
       part.obj.position.copy(part.home);
       part.obj.quaternion.copy(part.homeQ);
