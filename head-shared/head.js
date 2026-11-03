@@ -428,18 +428,56 @@ export function buildHead() {
     return o;
   };
   {
-    // F-01: horn-root block between the horn's flanks (y 1.18–1.5), and the column's chamfer + side faces
-    const cf = (y) => 1.03 - 0.14 * (y - 1.18); // column inner edge depth, leaning back with the horn
-    const tan30 = Math.tan(30 * D2R);
-    shell([[P3(0, 1.18, 1.06), P3(0, 1.5, 1.01), P3(0.17, 1.5, 0.95), P3(0.17, 1.18, 1.0)]], new V3(0, 1.34, 0.5));
-    const OUT = [[0.35, 1.18], [0.35, 1.3], [0.33, 1.59], [0.29, 1.64], [0.25, 1.85], [0.25, 1.95]];
-    const oz = ([x, y]) => cf(y) - tan30 * (x - 0.17);
-    const chamfer = [P3(0.17, 1.18, cf(1.18)), ...OUT.map((q) => P3(q[0], q[1], oz(q))), P3(0.17, 1.95, cf(1.95))];
-    const sides = OUT.slice(0, -1).map((q, i) => {
-      const r = OUT[i + 1];
-      return [P3(q[0], q[1], oz(q)), P3(r[0], r[1], oz(r)), P3(r[0] * 0.92, r[1], 0.5), P3(q[0] * 0.92, q[1], 0.5)];
-    });
-    shell([chamfer, ...sides], new V3(0, 1.55, 0.6));
+    // F-01: the horn's base housing, read at 3x off reference/parts/horn.png (grid/hb-front, hb-side, hb-top; 200 px
+    // per part unit, origin = blade root: front x 183, side x 534, y 715). Every piece is the intersection of its
+    // front, side and top outlines (viewHull), so every face is a chamfer at the angle the views give:
+    //   tab    the small block at the front foot          core   the ramp under the blade's chevron
+    //   lobes  hexagonal blocks either side, front face folded at the crease, a slanted slot on the front,
+    //          a hole and a dark recess on the side      lugs   tall chamfered pillars hugging the blade
+    // Scaled .64 so its width matches the column of the Unicorn sheet, its foot on the camera recess (y 1.18).
+    {
+      const fx = (px) => (px - 183) / 200;
+      const sz = (px) => (534 - px) / 200;
+      const yy = (py) => (715 - py) / 200;
+      const zt = (ty) => -0.36 + (ty - 661) * 0.00466; // top view's depth axis onto the side view's
+      const tx = (px) => (px - 1082) / 200;
+      const HB = new THREE.Group();
+      const K = 0.64;
+      HB.scale.setScalar(K);
+      HB.position.set(0, 1.18 + 0.915 * K, 1.15 - 0.665 * K); // lobe fronts level with the forehead plates (z ~1.05)
+      const vh = (spec, mirror = false) => geoOf((m) => viewHull(m, spec, {mirror}));
+      const tab = vh({
+        front: [[fx(160), yy(902)], [fx(208), yy(902)], [fx(208), yy(877)], [fx(160), yy(877)]],
+        side: [[sz(401), yy(898)], [sz(440), yy(898)], [sz(447), yy(860)], [sz(422), yy(851)]],
+        top: [[tx(1057), zt(825)], [tx(1108), zt(825)], [tx(1103), zt(897)], [tx(1062), zt(897)]],
+      });
+      const core = vh({
+        front: [[fx(150), yy(805)], [fx(216), yy(805)], [fx(217), yy(877)], [fx(150), yy(877)]],
+        side: [[sz(430), yy(898)], [sz(571), yy(898)], [sz(603), yy(807)], [sz(480), yy(812)]],
+      });
+      const lobe = vh({
+        front: [[fx(240), yy(800)], [fx(258), yy(785)], [fx(292), yy(820)], [fx(292), yy(855)], [fx(272), yy(895)], [fx(228), yy(895)], [fx(225), yy(872)]],
+        side: [[sz(430), yy(898)], [sz(571), yy(898)], [sz(606), yy(818)], [sz(603), yy(807)], [sz(467), yy(843)]],
+        top: [[tx(1120), zt(661)], [tx(1142), zt(661)], [tx(1190), zt(708)], [tx(1190), zt(783)], [tx(1133), zt(850)], [tx(1120), zt(850)]],
+      }, true);
+      const lug = vh({
+        front: [[fx(222), yy(895)], [fx(225), yy(737)], [fx(240), yy(720)], [fx(253), yy(738)], [fx(258), yy(785)], [fx(240), yy(880)]],
+        side: [[sz(470), yy(843)], [sz(480), yy(812)], [sz(520), yy(742)], [sz(590), yy(698)], [sz(600), yy(700)], [sz(606), yy(768)], [sz(603), yy(807)]],
+      }, true);
+      // dark details as thin folded sheets laid on the faces they sit in
+      const zFront = (py) => sz(430 + (37 * (898 - py)) / 55); // the lobes' front face, slanting back as it rises
+      const flat = (pts) => geoOf((m) => foldedShell(m, MX([pts]), 0.012, {centre: new V3(0, -0.6, -1)}));
+      const slotF = flat([[262, 855], [285, 842], [287, 849], [264, 862]].map(([x, y]) => P3(fx(x), yy(y), zFront(y) + 0.012)));
+      const onSide = (x, pts) => flat(pts.map(([z, y]) => P3(x, yy(y), sz(z))));
+      const slotS = onSide(fx(258) + 0.01, [[532, 808], [587, 790], [589, 798], [534, 816]]);
+      const hole = onSide(fx(292) + 0.01, [[545, 833], [557, 833], [557, 862], [545, 862]]);
+      const under = onSide(fx(292) + 0.01, [[490, 878], [572, 878], [572, 897], [490, 897]]);
+      HB.add(mesh(tab, M.white), mesh(core, M.white), mesh(lobe, M.white), mesh(lug, M.white));
+      // the recess between the lugs and the lobes reads as shaded metal, not a hole into the head
+      browGroup.add(mesh(geoOf((m) => viewHull(m, {front: [[-0.3, 1.2], [0.3, 1.2], [0.26, 1.78], [-0.26, 1.78]], side: [[0.42, 1.2], [0.95, 1.2], [0.8, 1.78], [0.42, 1.78]]})), M.white)); // the U-collar's wall behind the horn
+      for (const d of [slotF, slotS, hole, under]) HB.add(mesh(d, M.lens, false));
+      browGroup.add(HB);
+    }
 
     // F-02: the recess. floor z(y) runs back as it rises; bevels 135° (45° to the floor), pillars turned out 30°
     const fl = (y) => 0.98 + (0.28 * (1.12 - y)) / 0.62;
@@ -482,7 +520,8 @@ export function buildHead() {
     const fold = [P3(0.37, 1.31, cz(0.37, 1.31)), P3(0.55, 1.7, cz(0.55, 1.7))];
     const outer = [fold[0], P3(0.51, 1.27, cz(0.51, 1.27)), P3(0.81, 0.92, cz(0.81, 0.92)), P3(0.97, 1.0, cz(0.97, 1.0)), P3(0.95, 1.2, cz(0.95, 1.2)), fold[1]];
     const inZ = (x, y) => cz(x, y) + 0.2 * Math.max(0, 0.37 + (y - 1.31) * 0.46 - x);
-    const inner = [fold[1], P3(0.43, 1.81, inZ(0.43, 1.81)), P3(0.27, 1.85, inZ(0.27, 1.85)), P3(0.31, 1.64, inZ(0.31, 1.64)), P3(0.35, 1.36, inZ(0.35, 1.36)), fold[0]];
+    // its inner edge stops at x .36 where the horn base (F-01) begins
+    const inner = [fold[1], P3(0.43, 1.81, inZ(0.43, 1.81)), P3(0.36, 1.84, inZ(0.36, 1.84)), P3(0.36, 1.36, inZ(0.36, 1.36)), fold[0]];
     shell([outer, inner], new V3(0.4, 1.3, 0.2));
 
     // brow: the lower plate from the forehead plate down to the visor's top edge, beside the beak
@@ -506,8 +545,9 @@ export function buildHead() {
     horn.quaternion.setFromUnitVectors(new V3(0, 1, 0), dir);
     horn.userData.dir = dir;
     const PS = HORN.partScale;
-    const W = (f) => PS * 0.258 * Math.max(0, 1 - f) ** 0.72 + 0.004; // half width, front view
-    const Dp = (f) => PS * 0.24 * Math.max(0, 1 - f) ** 0.62 + 0.004; // half depth, side view
+    const HW = 0.82; // the Unicorn sheet's horn is this much slimmer than the part sheet's; its base is built at .64
+    const W = (f) => HW * PS * 0.258 * Math.max(0, 1 - f) ** 0.72 + 0.004; // half width, front view
+    const Dp = (f) => HW * PS * 0.24 * Math.max(0, 1 - f) ** 0.62 + 0.004; // half depth, side view
     const pf = (f) => 0.5 + 0.2 * Math.max(0, 1 - f) ** 1.5; // 0.7 = octagon at the root, 0.5 = diamond at the tip
     const SEG = [0, 0.13, 0.32, 0.47, 0.62, 0.74, 1];
     const CHEV = 0.55; // seam rises this much per unit out from the centre line
@@ -577,14 +617,14 @@ export function buildHead() {
     hornParts.push(base);
     // the hinge: two knuckles and an axle across the horn's root, lit up only by the explode
     const hinge = new THREE.Group();
-    const knuckle = new THREE.CylinderGeometry(0.11, 0.11, 0.2, 10);
+    const knuckle = new THREE.CylinderGeometry(0.06, 0.06, 0.12, 10); // inside the slimmed horn root
     knuckle.rotateX(Math.PI / 2);
     for (const s of [1, -1]) {
       const k = mesh(knuckle, M.frameMid, false);
-      k.position.set(s * 0.12, 0.05, 0);
+      k.position.set(s * 0.07, 0.05, 0);
       hinge.add(k);
     }
-    const axle = new THREE.CylinderGeometry(0.035, 0.035, 0.42, 8);
+    const axle = new THREE.CylinderGeometry(0.025, 0.025, 0.26, 8);
     axle.rotateZ(Math.PI / 2);
     const ax = mesh(axle, M.steel, false);
     ax.position.set(0, 0.05, 0);
