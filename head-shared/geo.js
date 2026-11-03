@@ -492,3 +492,78 @@ export function viewHull(m, {front, side, top, cuts = []}, {mirror = false} = {}
   }
   return m;
 }
+
+/**
+ * Like prism(), but the far face follows a curved far(a, b): the outline is densified (max edge `seg`) and the top is
+ * triangulated then subdivided until every edge is under `seg`, each new point lifted onto far(). Used for armor panels
+ * laid onto a curved shell, where corner-only triangles would sag through it.
+ */
+export function prismDense(m, poly, axis, near, far, bevel = 0.03, {seg = 0.2, mirror = false} = {}) {
+  let P = poly.map((p) => [...p]);
+  if (area2(P) < 0) P.reverse();
+  const D = [];
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i];
+    const b = P[(i + 1) % P.length];
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / seg));
+    for (let k = 0; k < n; k++) D.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
+  }
+  const P0 = P;
+  P = D;
+  const Q = bevel > 0 ? inset(P, bevel) : P;
+  const Q0 = bevel > 0 ? inset(P0, bevel) : P0; // the top is triangulated from the corners only: no slivers
+  const map = AX[axis];
+  const N = typeof near === 'number' ? () => near : near;
+  const F = far;
+  const s = Math.sign(F(P[0][0], P[0][1]) - N(P[0][0], P[0][1])) || 1;
+  const up = AXV[axis];
+  for (const mx of mirror ? [false, true] : [false]) {
+    const W = (a, b, h) => {
+      const v = map(a, b, h);
+      if (mx) v.x = -v.x;
+      return v;
+    };
+    const flip = (v) => {
+      const w = v.clone();
+      if (mx) w.x = -w.x;
+      return w;
+    };
+    const topN = flip(up.clone().multiplyScalar(s));
+    // top: triangulate the inset outline, then split long edges (midpoints shared through a cache)
+    let tris = THREE.ShapeUtils.triangulateShape(Q0.map((q) => new THREE.Vector2(q[0], q[1])), []).map((t) => t.map((i) => Q0[i]));
+    // split every triangle in a pass while any is too long: uniform subdivision, so no T-junctions (cracks that
+    // the ink pass would draw as scratches)
+    for (let pass = 0; pass < 6; pass++) {
+      const next = [];
+      const longest = Math.max(...tris.map(([a, b, c]) => Math.max(Math.hypot(a[0] - b[0], a[1] - b[1]), Math.hypot(b[0] - c[0], b[1] - c[1]), Math.hypot(c[0] - a[0], c[1] - a[1]))));
+      const split = longest > seg * 1.2;
+      for (const [a, b, c] of tris) {
+        if (!split) {
+          next.push([a, b, c]);
+          continue;
+        }
+        const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        const ab = mid(a, b);
+        const bc = mid(b, c);
+        const ca = mid(c, a);
+        next.push([a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]);
+      }
+      tris = next;
+      if (!split) break;
+    }
+    for (const [a, b, c] of tris) m.tri(W(a[0], a[1], F(a[0], a[1])), W(b[0], b[1], F(b[0], b[1])), W(c[0], c[1], F(c[0], c[1])), topN);
+    const trisP = THREE.ShapeUtils.triangulateShape(P.map((q) => new THREE.Vector2(q[0], q[1])), []);
+    const bot = P.map(([a, b]) => W(a, b, N(a, b)));
+    for (const [i, j, k] of trisP) m.tri(bot[i], bot[j], bot[k], topN.clone().negate());
+    const top = Q.map(([a, b]) => W(a, b, F(a, b)));
+    const rim = P.map(([a, b]) => W(a, b, F(a, b) - s * bevel * 0.8));
+    for (let i = 0; i < P.length; i++) {
+      const j = (i + 1) % P.length;
+      const e = [P[j][0] - P[i][0], P[j][1] - P[i][1]];
+      const out = flip(map(e[1], -e[0], 0).normalize());
+      if (bevel > 0) m.quad(top[i], top[j], rim[j], rim[i], out.clone().add(topN));
+      m.quad(rim[i], rim[j], bot[j], bot[i], out);
+    }
+  }
+  return m;
+}
