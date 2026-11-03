@@ -928,7 +928,8 @@ export function buildHead() {
     // y −1.2, bottom 1.26 at −1.46). All folded sheets / three-view solids, no flat slab.
     // Destroy sheet: ±.6 at the top edge (y −.05), tapering to ±.22 at the chin (y −.70)
     // recessed between the opened mask halves (Destroy side sheet: the halves' front edges stand proud of it)
-    const ROWS = [[-0.05, 0.58, 1.1], [-0.4, 0.5, 1.07], [-0.7, 0.26, 1.02]]; // edges tucked just under the mask halves' backs: no gap // inside the mask halves' U (S-03), not in front of it
+    // taller, as the sheet draws it: from the eye sill (y 0) down to the chin (−.88), edges tucked under the mask halves
+    const ROWS = [[0.0, 0.58, 1.1], [-0.5, 0.5, 1.07], [-0.88, 0.3, 1.02]]; // inside the mask halves' U (S-03), not in front of it
     const P = (x, y, z) => new V3(x, y, z);
     const facets = [];
     for (let i = 0; i < 2; i++) {
@@ -946,16 +947,16 @@ export function buildHead() {
       }
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.1 + 0.13 + (0.03 / 0.35) * (y + 0.05); // on the ridge
+    const faceZ = (y) => 1.1 + 0.13 + (0.03 / 0.5) * y; // on the ridge
     // mouth vents: three chevrons on the upper front facet
-    for (const y of [-0.2, -0.31, -0.42])
+    for (const y of [-0.2, -0.33, -0.46])
       g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.23 * Math.abs(x) + 0.012, 0.006, {mirror: true})), M.lens, false));
     const chin = mesh(
       geoOf((m) =>
         viewHull(m, {
           // hexagonal block hanging from the faceplate's point (sheet: ±.18, y −.70 … −1.25)
-          front: [[-0.15, -0.62], [0.15, -0.62], [0.15, -0.94], [0.09, -1.08], [-0.09, -1.08], [-0.15, -0.94]],
-          side: [[0.85, -0.62], [0.98, -0.62], [1.17, -0.95], [1.17, -1.08], [0.85, -1.08]],
+          front: [[-0.15, -0.72], [0.15, -0.72], [0.15, -1.0], [0.09, -1.16], [-0.09, -1.16], [-0.15, -1.0]],
+          side: [[0.85, -0.72], [1.1, -0.72], [1.25, -0.98], [1.22, -1.16], [0.85, -1.16]],
           top: [[-0.18, 0.95], [0.18, 0.95], [0.18, 1.2], [0.1, 1.3], [-0.1, 1.3], [-0.18, 1.2]],
         }),
       ),
