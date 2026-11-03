@@ -6,12 +6,14 @@
 // in the ear pods and a neck ball joint. update({d, explode, armor, time}) poses all of it from kin.js.
 import * as THREE from 'three';
 import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, prismSplit, shellPlate, prismDense, sweep, viewHull, clipPoly} from './geo.js';
+import {ConvexGeometry} from 'three/addons/geometries/ConvexGeometry.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 
 const V3 = THREE.Vector3;
 // the face's depth, measured off the Unicorn side view (centre line), with a cross curve back toward the cheeks
-const FACE_PROFILE = [[0.1, 1.37], [-0.1, 1.34], [-0.25, 1.32], [-0.35, 1.29], [-0.45, 1.25], [-0.55, 1.2], [-0.65, 1.17], [-0.75, 1.15], [-0.85, 1.16], [-0.95, 1.18], [-1.05, 1.2], [-1.15, 1.25], [-1.25, 1.3]];
+// read at 3x off reference/grid/f3-side.png: upper face bulging 1.32 → 1.13, hollow at the fold, chin bulge 1.18, bottom 1.08
+const FACE_PROFILE = [[0.1, 1.33], [-0.12, 1.32], [-0.35, 1.27], [-0.57, 1.2], [-0.77, 1.14], [-0.88, 1.16], [-1.0, 1.21], [-1.12, 1.25], [-1.25, 1.27]];
 const faceZ = (y) => {
   const P = FACE_PROFILE;
   if (y >= P[0][0]) return P[0][1];
@@ -23,7 +25,12 @@ const faceZ = (y) => {
     }
   return P[P.length - 1][1];
 };
-const FACE_SURF = (x, y) => faceZ(y) - 0.25 * x * x - 0.05 * Math.abs(x);
+// top view (f3-top.png): a narrow front 0.2 wide, then the sides turn back ~35°, reaching z .87 at the mask edge
+const FACE_SURF = (x, y) => {
+  const a = Math.abs(x);
+  const o = Math.max(0, a - 0.2);
+  return faceZ(y) - 0.15 * a - 0.55 * o - 0.3 * o * o;
+};
 const POD_UP = 0.08; // the side sheet sets the pod low on the head, the front sheet higher; the side wins (it is the view people read)
 
 // helmet surface, read off the Unicorn sheet: [y, half width, front z, back z]
@@ -427,7 +434,7 @@ export function buildHead() {
       const d = y - ridgeY(x);
       return 1.66 - 0.42 * Math.abs(x) - (d < 0 ? -0.95 * d : 0.55 * d);
     };
-    const W = [[0.3, 0.62], [0.45, 0.38], [1.12, 0.38], [1.15, 0.58], [0.95, 1.0], [0.5, 1.0]];
+    const W = [[0.3, 0.62], [0.2, 0.08], [0.7, 0.07], [0.95, 0.32], [1.15, 0.58], [0.95, 1.0], [0.5, 1.0]];
     const wings = geoOf((m) => {
       for (const [a, b, c] of [[-0.12, 1, 0.45 - 0.006], [0.12, -1, -0.45 - 0.006]]) {
         const P = clipPoly(W, a, b, c);
@@ -589,18 +596,22 @@ export function buildHead() {
     // cheek front all lie on this one surface, so they read as one convex face with a dip between face and chin.
     const mask = FACE_SURF;
     const shell = mk((m) => {
-      prismDense(m, [[0.012, -0.1], [0.74, 0.16], [0.66, -0.53], [0.4, -0.72], [0.012, -0.9]], 'z', (x, y) => mask(x, y) - 0.2, mask, 0.025, {seg: 0.06});
-      prismDense(m, [[0.012, -0.93], [0.4, -0.75], [0.64, -0.58], [0.2, -1.2], [0.012, -1.2]], 'z', (x, y) => mask(x, y) - 0.2, (x, y) => mask(x, y) + 0.012, 0.025, {seg: 0.06});
+      // read at 3x off f3-front.png: the upper panel down to the fold (centre y −.9, outer corner .64, −.53), the lower
+      // V's front facet down to the chin, and its side facet turning back
+      prismDense(m, [[0.006, -0.13], [0.7, 0.03], [0.64, -0.53], [0.19, -0.9], [0.006, -0.9]], 'z', (x, y) => mask(x, y) - 0.2, mask, 0.022, {seg: 0.05});
+      prismDense(m, [[0.006, -0.92], [0.19, -0.92], [0.15, -1.2], [0.006, -1.2]], 'z', (x, y) => mask(x, y) - 0.2, (x, y) => mask(x, y) + 0.015, 0.02, {seg: 0.05});
+      prismDense(m, [[0.21, -0.91], [0.64, -0.555], [0.47, -0.66], [0.165, -1.2]], 'z', (x, y) => mask(x, y) - 0.2, (x, y) => mask(x, y) + 0.015, 0.02, {seg: 0.05});
     });
     // one chin block under the V (not split): it bulges forward like the face above it and tucks up behind the
     // faceplate when the mask opens
     if (s > 0) {
-      const chin = geoOf((m) => prismDense(m, [[-0.165, -1.215], [0.165, -1.215], [0.14, -1.55], [-0.14, -1.55]], 'z', 0.95, (x, y) => 1.34 + 0.28 * (y + 1.215) - 0.6 * x * x - 0.1 * (y + 1.215) * (y + 1.215) * 4, 0.025, {seg: 0.05}));
+      const chin = geoOf((m) => prismDense(m, [[-0.135, -1.215], [0.135, -1.215], [0.135, -1.57], [-0.135, -1.57]], 'z', 0.8, (x, y) => 1.27 - 0.25 * (-1.215 - y) - 0.6 * x * x, 0.02, {seg: 0.05}));
       const jg = new THREE.Group();
       jg.add(mesh(chin, M.white, 40));
       add(jg, new V3(0, -1.0, 0.9), (p, obj) => obj.position.add(new V3(0, 0.28 * p.mask, -0.42 * p.mask)));
     }
-    const visor = mk((m) => viewHull(m, {front: [[0.012, 0.14], [0.012, -0.1], [1.12, 0.2], [1.12, 0.4]], side: [[0.85, 0.42], [1.4, 0.42], [1.36, -0.12], [0.85, -0.12]], top: [[0.0, 0.85], [0.0, 1.45], [1.12, 0.95], [1.12, 0.8]]}));
+    // visor band (f3-front): centre .03 / −.13, outer end x .92 at .30 / .15, on the face surface
+    const visor = mk((m) => prismDense(m, [[0.006, 0.03], [0.006, -0.13], [0.7, 0.03], [0.92, 0.15], [0.92, 0.3]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
     const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white, 40));
     const vg = new THREE.Group();
     vg.add(mesh(visor, M.visor, false));
@@ -682,7 +693,21 @@ export function buildHead() {
     // mask's edge, running from beside the visor down and in toward the chin; its side plate leans inward toward the
     // jaw (x 1.0 at the top, .85 at the bottom), its lower front corner cut back to a point (side view)
     const geo = geoOf((m) => {
-      prismDense(m, [[0.76, 0.17], [1.02, 0.22], [1.0, -0.5], [0.72, -1.05], [0.5, -0.9], [0.66, -0.53]], 'z', (x, y) => FACE_SURF(x, y) - 0.45, (x, y) => FACE_SURF(x, y) - 0.035, 0.025, {seg: 0.08});
+      // one piece wrapping from the front to the side, given by its 3D corners read off the three views: its front
+      // strip runs beside the mask from the visor's outer end (x .70–.88) down and in to the chin (x .40–.50), its
+      // side plate reaches back to z .42 with the lower edge rising toward the back; front edge z .93 (side view)
+      const P = [
+        [0.7, 0.04, 0.95], [0.88, 0.15, 0.86], [0.86, -0.24, 0.86], [0.5, -1.22, 1.02], [0.4, -1.18, 1.06],
+        [0.99, 0.1, 0.42], [0.98, -0.38, 0.42], [0.83, -0.93, 0.63],
+        [0.6, 0.04, 0.8], [0.32, -1.14, 0.82], [0.86, 0.1, 0.42], [0.72, -0.9, 0.6],
+      ].map(([x, y, z]) => new V3(x, y, z));
+      const hull = new ConvexGeometry(P);
+      const pa = hull.attributes.position.array;
+      const c = P.reduce((q, v) => q.add(v), new V3()).multiplyScalar(1 / P.length);
+      for (let i = 0; i < pa.length; i += 9) {
+        const v = [0, 3, 6].map((o) => new V3(pa[i + o], pa[i + o + 1], pa[i + o + 2]));
+        m.tri(v[0], v[1], v[2], v[0].clone().add(v[1]).add(v[2]).multiplyScalar(1 / 3).sub(c));
+      }
 
     });
     const g = new THREE.Group();
