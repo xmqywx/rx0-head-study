@@ -81,7 +81,8 @@ function materials() {
     steel: std({color: '#8d959c', roughness: 0.35, metalness: 0.7}),
     visor: std({color: '#1b2128', roughness: 0.16, metalness: 0.5, envMapIntensity: 1}),
     lens: std({color: '#0d1114', roughness: 0.75, metalness: 0.05, envMapIntensity: 0.15}),
-    red: std({color: '#c81e14', emissive: '#ff1a0a', emissiveIntensity: 0, roughness: 0.3, metalness: 0.15, envMapIntensity: 0.9}),
+    redHot: std({color: '#ff9a80', emissive: '#ff5030', emissiveIntensity: 0, roughness: 0.3}),
+    red: std({color: '#d8261a', emissive: '#ff1a0a', emissiveIntensity: 0, roughness: 0.3, metalness: 0.15, envMapIntensity: 0.9}),
     chin: std({color: '#c8262a', roughness: 0.4}),
     maroon: std({color: '#6e1d1a', roughness: 0.45}),
     eyeRim: std({color: '#123a1c', roughness: 0.4}),
@@ -775,13 +776,29 @@ export function buildHead() {
     // the frame sheet that rides under this half: same outline, a little larger, just behind it, so the opened
     // half shows a red rim along its edges (Destroy sheet, "opened mask halves")
     {
-      const r = shell.clone();
-      r.computeBoundingBox();
-      const c = r.boundingBox.getCenter(new V3());
-      r.translate(-c.x, -c.y, -c.z);
-      r.scale(0.97, 0.97, 1);
-      r.translate(c.x, c.y, c.z - 0.07);
-      maskRed = mesh(r, M.red, false);
+      // the frame strip along the half's outer edge, traced from the Destroy sheet's red L: down from beside the eye
+      // (x .74, y .1) to (.6, −.65), then diagonally in to the chin (.3, −1.4). A flat red strip with a hot core,
+      // standing just outside the half's edge and behind it, so it shows as a glowing seam between mask and cheek.
+      const E = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]]; // the fold between the half's inner panel and outer facet
+      const at = ([x, y], dx) => new V3(sx(x) + dx * s, y, FACE_SURF(Math.min(x, 0.74), y) + 0.035);
+      const sx = (x) => s * x;
+      const strip = (w0, w1, mat) => {
+        const m2 = new Mesher();
+        for (let k = 0; k < E.length - 1; k++) {
+          const a = E[k];
+          const b = E[k + 1];
+          const A0 = at(a, w0), A1 = at(a, w1), B0 = at(b, w0), B1 = at(b, w1);
+          m2.quad(A0, B0, B1, A1, new V3(0, 0, 1));
+          const back = (v) => v.clone().add(new V3(0, 0, -0.05));
+          m2.quad(back(A0), back(A1), back(B1), back(B0), new V3(0, 0, -1));
+          m2.quad(A1, B1, back(B1), back(A1), new V3(s, 0, 0));
+          m2.quad(A0, back(A0), back(B0), B0, new V3(-s, 0, 0));
+        }
+        return mesh(m2.geo(), mat, false);
+      };
+      maskRed = new THREE.Group();
+      maskRed.add(strip(-0.035, 0.035, M.red), strip(-0.012, 0.012, M.redHot));
+      maskRed.children[1].position.z = 0.004;
       pv.children[0].add(maskRed);
     }
     // the hinge itself: three knuckles on a vertical axle with bearing rings, between mask and cheek guard
@@ -824,7 +841,8 @@ export function buildHead() {
     // runs z 1.29 at its top (y −.1) down to 1.24 at y −.62 (the vents), then folds back to 1.12 at −.84; its sides
     // fold back 135° toward the cheeks. The red chin is a wedge jutting forward and down (front corner z 1.33 at
     // y −1.2, bottom 1.26 at −1.46). All folded sheets / three-view solids, no flat slab.
-    const ROWS = [[-0.05, 0.55, 1.29], [-0.62, 0.45, 1.24], [-0.9, 0.22, 1.12]]; // sheet: ±.6 at the top edge incl. the bevel
+    // Destroy sheet: ±.6 at the top edge (y −.05), tapering to ±.22 at the chin (y −.70)
+    const ROWS = [[-0.05, 0.58, 1.29], [-0.4, 0.44, 1.26], [-0.7, 0.22, 1.2]];
     const P = (x, y, z) => new V3(x, y, z);
     const facets = [];
     for (let i = 0; i < 2; i++) {
@@ -839,21 +857,24 @@ export function buildHead() {
       }
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.29 + (0.05 / 0.57) * (y + 0.05);
+    const faceZ = (y) => 1.29 + (0.03 / 0.35) * (y + 0.05);
     // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.2, -0.31, -0.42])
       g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) + 0.008, 0.006, {mirror: true})), M.lens, false));
     const chin = mesh(
       geoOf((m) =>
         viewHull(m, {
-          front: [[-0.15, -0.86], [0.15, -0.86], [0.12, -1.46], [-0.12, -1.46]],
-          side: [[1.12, -0.86], [1.33, -1.2], [1.26, -1.46], [0.9, -1.28], [0.92, -0.9]],
-          top: [[-0.15, 0.9], [0.15, 0.9], [0.15, 1.12], [0.09, 1.33], [-0.09, 1.33], [-0.15, 1.12]],
+          // hexagonal block hanging from the faceplate's point (sheet: ±.18, y −.70 … −1.25)
+          front: [[-0.18, -0.7], [0.18, -0.7], [0.18, -1.08], [0.1, -1.25], [-0.1, -1.25], [-0.18, -1.08]],
+          side: [[0.95, -0.7], [1.22, -0.7], [1.3, -0.95], [1.24, -1.25], [0.95, -1.25]],
+          top: [[-0.18, 0.95], [0.18, 0.95], [0.18, 1.2], [0.1, 1.3], [-0.1, 1.3], [-0.18, 1.2]],
         }),
       ),
       M.chin,
       false,
     );
+    // the dark jaw behind the shield and beside the chin (sheet: dark grey parts round the chin, no opening)
+    g.add(mesh(geoOf((m) => prism(m, [[-0.5, -0.1], [0.5, -0.1], [0.5, -0.9], [0.3, -1.3], [-0.3, -1.3], [-0.5, -0.9]], 'z', 0.85, 1.05, 0.02)), M.frame, false));
     // the chin rides up inside the face in Unicorn Mode and drops into place as the faceplate rolls out
     const chinG = new THREE.Group();
     chinG.add(chin);
@@ -868,6 +889,7 @@ export function buildHead() {
   }
 
   // ---------------------------------------------------------------- dual-eye sensor unit
+  let eyeBar = null;
   {
     const g = new THREE.Group();
     // Traced at 5x off the Destroy sheet's front view (refmatch/out/eyes1.png, origin at the sheet's fitted front
@@ -882,9 +904,17 @@ export function buildHead() {
     g.add(mesh(geoOf((m) => prism(m, RIM, 'z', 0.8, (x, y) => eyeFar(x, y) - 0.008, 0.008, {mirror: true})), M.eyeRim, false));
     const eyes = mesh(geoOf((m) => prism(m, EYE, 'z', 0.8, eyeFar, 0.012, {mirror: true})), M.green, false);
     g.add(eyes);
+    // the glowing frame bar standing in a dark slot beside each eye (sheet: x .84–.95, y .0 … .42, a hot core)
+    const bar = new THREE.Group();
+    bar.add(
+      mesh(geoOf((m) => prism(m, [[0.84, 0.0], [0.95, 0.04], [0.95, 0.44], [0.84, 0.4]], 'z', 0.7, (x, y) => eyeFar(x, y) - 0.0, 0.01, {mirror: true})), M.red, false),
+      mesh(geoOf((m) => prism(m, [[0.875, 0.06], [0.915, 0.07], [0.915, 0.38], [0.875, 0.36]], 'z', 0.7, (x, y) => eyeFar(x, y) + 0.008, 0.004, {mirror: true})), M.redHot, false),
+    );
+    g.add(bar);
+    eyeBar = bar;
     // maroon sill under the eyes, from beside the nose out toward the cheek
     g.add(mesh(geoOf((m) => prism(m, [[0.0, -0.04], [0.84, 0.0], [0.86, 0.06], [0.68, 0.06], [0.3, 0.02], [0.0, 0.03]], 'z', 0.8, (x, y) => eyeFar(x, y) + 0.01, 0.01, {mirror: true})), M.maroon, false));
-    add(g, new V3(0, 0.05, 1.25));
+    add(g, new V3(0, 0.05, 1.25), (p) => (eyeBar.position.z = -0.35 * (1 - p.frame))); // the bars slide out in NT-D
     anchors.eyes = {obj: g, p: new V3(0.4, 0.0, 1.0)};
   }
 
@@ -949,6 +979,7 @@ export function buildHead() {
       }),
     );
     const g = new THREE.Group();
+    g.userData.noRed = true;
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white, 40));
     // the lower tab only appears in NT-D: it slides down out of the cheek guard (Destroy sheet side view)
     const tabG = new THREE.Group();
@@ -1104,7 +1135,8 @@ export function buildHead() {
     for (const l of inkLines) l.visible = ink;
     // psycho-frame: dull red at rest, a breathing glow as NT-D builds
     const beat = 0.5 + 0.5 * Math.sin(time * (2.2 + 2 * p.frame));
-    M.red.emissiveIntensity = p.frame * (0.55 + 0.35 * beat);
+    M.red.emissiveIntensity = p.frame * (1.0 + 0.5 * beat);
+    M.redHot.emissiveIntensity = p.frame * (1.8 + 0.6 * beat);
     if (underSheet) underSheet.morphTargetInfluences[0] = p.frame; // the frame pieces push out under the plates
     M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
     return p;
