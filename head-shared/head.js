@@ -84,6 +84,7 @@ function materials() {
     red: std({color: '#c81e14', emissive: '#ff1a0a', emissiveIntensity: 0, roughness: 0.3, metalness: 0.15, envMapIntensity: 0.9}),
     chin: std({color: '#c8262a', roughness: 0.4}),
     maroon: std({color: '#6e1d1a', roughness: 0.45}),
+    eyeRim: std({color: '#123a1c', roughness: 0.4}),
     green: std({color: '#0f2016', emissive: '#39ff6e', emissiveIntensity: 0, roughness: 0.55, envMapIntensity: 0.3}),
     ink: new THREE.LineBasicMaterial({color: '#2a2f35', transparent: true, opacity: 0.8}),
   };
@@ -573,9 +574,10 @@ export function buildHead() {
     // brow: the lower plate from the forehead plate down to the visor's top edge, beside the beak
     // its lower edge rests on the visor's top edge (.17 at the centre → .34 at x .69 → .42 at .92), leaving the band clear
     const BROW = [[0.37, 0.49, 1.3], [0.68, 0.62, 1.1], [0.81, 0.92, 0.88], [0.97, 1.0, 0.7], [1.02, 0.55, 0.78], [0.92, 0.44, 0.95], [0.69, 0.36, 1.12], [0.4, 0.28, 1.27], [0.3, 0.26, 1.29]];
-    shell([BROW.map(([x, y, z]) => P3(x, y, z))], new V3(0.55, 0.5, 0.3));
+    // the eye socket under this plate is dark on the Destroy sheet: no frame sheet behind it
+    shell([BROW.map(([x, y, z]) => P3(x, y, z))], new V3(0.55, 0.5, 0.3)).userData.noRed = true;
 
-    add(browGroup, new V3(0, 0.2, 1.0), (p, obj) => obj.position.add(new V3(0, 0.06 * p.crown, 0.16 * p.crown))); // slides forward in NT-D (Destroy sheet: prow further out)
+    add(browGroup, new V3(0, 0.2, 1.0), (p, obj) => obj.position.add(new V3(0, 0.04 * p.crown, 0.06 * p.crown))); // slides forward in NT-D (Destroy sheet: prow further out)
     anchors.brow = {obj: browGroup, p: new V3(0.62, 0.85, pz(0.62, 0.85))};
   }
 
@@ -640,8 +642,8 @@ export function buildHead() {
       const bl = mesh(geoOf((m) => prism(m, BL.map(([x, y]) => [x * BLW, y]), 'z', -0.012, 0.012, 0.006)), M.white);
       const blade = new THREE.Group(); // the hinge: along the half's length at the front of its split face
       blade.position.set(-s * 0.02, -0.06, 0.17);
-      bl.position.z = -0.17;
-      bl.position.x = 0;
+      blade.rotation.order = 'XYZ';
+      blade.rotation.x = -0.057; // the hinge follows the half's front edge as the horn tapers
       blade.add(bl);
       pv.add(blade);
       horn.add(pv);
@@ -822,7 +824,7 @@ export function buildHead() {
     // runs z 1.29 at its top (y −.1) down to 1.24 at y −.62 (the vents), then folds back to 1.12 at −.84; its sides
     // fold back 135° toward the cheeks. The red chin is a wedge jutting forward and down (front corner z 1.33 at
     // y −1.2, bottom 1.26 at −1.46). All folded sheets / three-view solids, no flat slab.
-    const ROWS = [[-0.22, 0.38, 1.29], [-0.66, 0.32, 1.24], [-0.9, 0.18, 1.12]];
+    const ROWS = [[-0.05, 0.55, 1.29], [-0.62, 0.45, 1.24], [-0.9, 0.22, 1.12]]; // sheet: ±.6 at the top edge incl. the bevel
     const P = (x, y, z) => new V3(x, y, z);
     const facets = [];
     for (let i = 0; i < 2; i++) {
@@ -837,9 +839,9 @@ export function buildHead() {
       }
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.29 + (0.05 / 0.44) * (y + 0.22);
+    const faceZ = (y) => 1.29 + (0.05 / 0.57) * (y + 0.05);
     // mouth vents: three chevrons on the upper front facet
-    for (const y of [-0.38, -0.48, -0.58])
+    for (const y of [-0.2, -0.31, -0.42])
       g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) + 0.008, 0.006, {mirror: true})), M.lens, false));
     const chin = mesh(
       geoOf((m) =>
@@ -868,13 +870,20 @@ export function buildHead() {
   // ---------------------------------------------------------------- dual-eye sensor unit
   {
     const g = new THREE.Group();
-    g.add(mesh(geoOf((m) => prism(m, [[-0.84, 0.44], [-0.1, 0.1], [0.1, 0.1], [0.84, 0.44], [0.84, -0.2], [-0.84, -0.2]], 'z', 0.7, (x) => 1.0 - 0.26 * Math.abs(x), 0.03)), M.frame, false));
+    // Traced at 5x off the Destroy sheet's front view (refmatch/out/eyes1.png, origin at the sheet's fitted front
+    // centre): each eye a slanted green blade rising outward — pointed at its inner-lower end, x .20 → .74,
+    // y .05 → .30 — set in a dark socket with a dark-green rim, a maroon sill under it from the nose to the
+    // cheek, and the dark socket filling everything round it up to the brow (no red here; red only at the
+    // cheek frame beyond x .85).
     const eyeFar = (x, y) => 1.1 + 0.1 * y - 0.3 * Math.abs(x);
-    // Destroy front view (grid/d-front-face.png): pentagons from x .24 to .8, y −.12 … .11, under the brow
-    const eyes = mesh(geoOf((m) => prism(m, [[0.24, -0.04], [0.3, 0.08], [0.76, 0.11], [0.81, 0.05], [0.72, -0.04], [0.42, -0.12]], 'z', 0.88, eyeFar, 0.015, {mirror: true})), M.green, false);
+    const EYE = [[0.2, 0.17], [0.31, 0.05], [0.66, 0.1], [0.74, 0.21], [0.69, 0.3], [0.26, 0.25]];
+    const RIM = [[0.16, 0.18], [0.3, 0.02], [0.68, 0.07], [0.78, 0.21], [0.71, 0.34], [0.24, 0.29]];
+    g.add(mesh(geoOf((m) => prism(m, [[0.0, 0.0], [0.0, 0.34], [0.22, 0.36], [0.72, 0.42], [0.88, 0.44], [0.88, 0.04], [0.5, 0.02]], 'z', 0.7, (x, y) => eyeFar(x, y) - 0.03, 0.01, {mirror: true})), M.frame, false));
+    g.add(mesh(geoOf((m) => prism(m, RIM, 'z', 0.8, (x, y) => eyeFar(x, y) - 0.008, 0.008, {mirror: true})), M.eyeRim, false));
+    const eyes = mesh(geoOf((m) => prism(m, EYE, 'z', 0.8, eyeFar, 0.012, {mirror: true})), M.green, false);
     g.add(eyes);
-    // the sensor housing: maroon, below and round the eyes
-    g.add(mesh(geoOf((m) => prism(m, [[0.04, -0.06], [0.22, -0.06], [0.42, -0.15], [0.74, -0.06], [0.88, 0.02], [0.88, -0.14], [0.44, -0.27], [0.04, -0.25]], 'z', 0.86, (x, y) => eyeFar(x, y) - 0.005, 0.01, {mirror: true})), M.maroon, false));
+    // maroon sill under the eyes, from beside the nose out toward the cheek
+    g.add(mesh(geoOf((m) => prism(m, [[0.0, -0.04], [0.84, 0.0], [0.86, 0.06], [0.68, 0.06], [0.3, 0.02], [0.0, 0.03]], 'z', 0.8, (x, y) => eyeFar(x, y) + 0.01, 0.01, {mirror: true})), M.maroon, false));
     add(g, new V3(0, 0.05, 1.25));
     anchors.eyes = {obj: g, p: new V3(0.4, 0.0, 1.0)};
   }
@@ -1137,7 +1146,9 @@ export function buildHead() {
       // two poses of the same piece: retracted deep inside (Unicorn Mode) and pushed out under its plate (NT-D)
       const lo = g.clone();
       lo.translate(-out.x * 0.65, -out.y * 0.65, -out.z * 0.65);
-      g.translate(-out.x * 0.075, -out.y * 0.075, -out.z * 0.075);
+      g.translate(-c.x, -c.y, -c.z);
+      g.scale(0.98, 0.98, 0.98);
+      g.translate(c.x - out.x * 0.09, c.y - out.y * 0.09, c.z - out.z * 0.09);
       list.push([lo, g]);
     });
     const base = mergeGeometries(list.map((q) => q[0]));
