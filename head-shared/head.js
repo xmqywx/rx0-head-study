@@ -829,8 +829,8 @@ export function buildHead() {
       maskRedX = -s * 0.03;
       // and the L in the fold between the half's inner panel and outer facet, seen from the front
       {
-        const F = [[0.72, 0.1], [0.62, -0.45], [0.5, -1.0]]; // the fold between the outer facet and the side wall: the sheet's L
-        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.035);
+        const F = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]]; // the fold between the inner panel and the outer facet: the sheet's L, left visible beside layer 2
+        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.07);
         const m3 = new Mesher();
         const fl = (w0, w1) => {
           for (let k = 0; k < F.length - 1; k++) {
@@ -842,7 +842,7 @@ export function buildHead() {
             m3.quad(A0, bk(A0), bk(B0), B0, new V3(-s, 0, 0));
           }
         };
-        fl(-0.1, 0.035);
+        fl(-0.04, 0.03);
         maskFront = mesh(m3.geo(), M.red, false);
         pv.children[0].add(maskFront);
       }
@@ -1045,7 +1045,38 @@ export function buildHead() {
       obj.position.y += 0.4 * (1 - p.cheek);
       obj.visible = p.cheek > 0.02;
     });
-    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (0.04 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.1 * p.cheek))); // stays tight against the mask half
+    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (-0.08 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.32 * p.cheek))); // steps back under the layers
+    // NT-D cheek: two more curved layers outside the opened mask half (Destroy front sheet: mask half, then two
+    // staggered cheek plates, each bent round the face and tapering in toward the jaw). Each is a uniform folded
+    // sheet, three columns across so it curves; they slide out from inside the head as NT-D runs.
+    {
+      const zw = (x, lift) => 1.3 - 0.4 * (x - 0.6) - 0.9 * (x - 0.6) ** 2 + lift;
+      const band = (rows, lift) => {
+        // rows: [y, xInner, xOuter] top to bottom → triangles over a 3-column grid on the wrap surface
+        const g3 = rows.map(([y, a, b]) => [a, (a + b) / 2, b].map((x) => new V3(x, y, zw(x, lift))));
+        const f = [];
+        for (let i = 0; i < g3.length - 1; i++)
+          for (let j = 0; j < 2; j++) {
+            f.push([g3[i][j], g3[i][j + 1], g3[i + 1][j + 1]]);
+            f.push([g3[i][j], g3[i + 1][j + 1], g3[i + 1][j]]);
+          }
+        return f;
+      };
+      // layer 2 starts just outside the red L on the mask half (sheet: mask half's visible strip ±.45–.75)
+      const L2 = band([[0.2, 0.9, 1.08], [-0.3, 0.92, 1.1], [-0.75, 0.8, 1.0], [-1.05, 0.62, 0.78]], 0.02);
+      const L3 = band([[0.28, 1.06, 1.26], [-0.3, 1.08, 1.28], [-0.82, 0.98, 1.16], [-1.12, 0.76, 0.9]], 0.05);
+      for (const [F, k] of [[L2, 0], [L3, 1]]) {
+        const geoL = geoOf((m) => foldedShell(m, F, 0.05, {centre: new V3(0.4, -0.4, 0.2)}));
+        const lg = new THREE.Group();
+        lg.add(mesh(s > 0 ? geoL : mirrorX(geoL), M.white, 40));
+        lg.userData.noRed = true;
+        add(lg, new V3(s * (0.8 + 0.3 * k), -0.3, 0.3), (p, obj) => {
+          const t = 1 - p.cheek;
+          obj.position.add(new V3(-s * (0.3 + 0.1 * k) * t, 0, -0.35 * t));
+          obj.visible = p.cheek > 0.02;
+        });
+      }
+    }
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }
 
