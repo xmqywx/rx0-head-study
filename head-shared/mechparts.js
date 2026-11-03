@@ -112,7 +112,8 @@ export function cables(points, r = 0.012) {
 }
 
 /** move a local-frame part onto a surface point: origin p, outward normal n, 'up' hint (tangent kept in the plane) */
-export function place(geo, p, n, up = new V3(0, 1, 0), spin = 0) {
+export function place(geo0, p, n, up = new V3(0, 1, 0), spin = 0) {
+  const geo = clean(geo0); // position + normal only, non-indexed: every placed part merges with every other
   const z = n.clone().normalize();
   const y = up.clone().addScaledVector(z, -up.dot(z)).normalize();
   const x = new V3().crossVectors(y, z);
@@ -120,4 +121,75 @@ export function place(geo, p, n, up = new V3(0, 1, 0), spin = 0) {
   if (spin) m.multiply(new THREE.Matrix4().makeRotationZ(spin));
   m.setPosition(p);
   return geo.clone().applyMatrix4(m);
+}
+
+// ---------------------------------------------------------------- articulated joints (exploded-view crops)
+const extrude = (shape, depth) => {
+  const g = new THREE.ExtrudeGeometry(shape, {depth, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 1, curveSegments: 10});
+  g.translate(0, 0, -depth / 2);
+  return g;
+};
+/** a dog-bone link plate between two pin centres (0,0) and (0,L), width w, with pin holes */
+export function linkPlate(L, w = 0.07, t = 0.025) {
+  const s = new THREE.Shape();
+  s.absarc(0, 0, w / 2, Math.PI, 0, false);
+  s.lineTo(w / 2, L);
+  s.absarc(0, L, w / 2, 0, Math.PI, false);
+  s.lineTo(-w / 2, 0);
+  for (const y of [0, L]) {
+    const h = new THREE.Path();
+    h.absarc(0, y, w * 0.22, 0, Math.PI * 2, true);
+    s.holes.push(h);
+  }
+  return extrude(s, t);
+}
+/** a clevis: a base block with two lugs and a pin across them; the pin axis is x, at height h */
+export function clevis(w = 0.14, h = 0.12, gap = 0.05) {
+  const parts = [box(w, 0.04, 0.1, 0, 0.02, 0)];
+  const lug = new THREE.Shape();
+  lug.moveTo(-0.045, 0);
+  lug.lineTo(0.045, 0);
+  lug.lineTo(0.045, h);
+  lug.absarc(0, h, 0.045, 0, Math.PI, false);
+  lug.lineTo(-0.045, 0);
+  const lh = new THREE.Path();
+  lh.absarc(0, h, 0.018, 0, Math.PI * 2, true);
+  lug.holes.push(lh);
+  const t = (w - gap) / 2;
+  for (const sx of [1, -1]) {
+    const g = extrude(lug, t);
+    g.rotateY(Math.PI / 2);
+    g.translate(sx * (gap / 2 + t / 2), 0.04, 0);
+    parts.push(g);
+  }
+  parts.push(cyl(0.018, 0.018, w + 0.03, 10, false, 0, 0.04 + h, 0).rotateZ(Math.PI / 2).translate(0, 0.04 + h, 0));
+  return merge(parts.map((g) => g));
+}
+/** a bearing joint: housing ring, inner race, axle stub; axis along z */
+export function bearing(r = 0.09, t = 0.06) {
+  return merge([
+    new THREE.TorusGeometry(r, r * 0.22, 8, 20),
+    cyl(r * 0.62, r * 0.62, t, 18, true, 0, 0, 0),
+    cyl(r * 0.3, r * 0.3, t * 1.8, 14, true, 0, 0, 0),
+    cyl(r * 0.36, r * 0.36, 0.012, 14, true, 0, 0, t * 0.9 + 0.006),
+  ]);
+}
+/** a socket boss: stepped block with a square socket on top (the horn-root plug drops into it) */
+export function socket(w = 0.2) {
+  return merge([box(w * 1.5, 0.05, w * 1.3, 0, 0.025, 0), box(w, 0.12, w * 0.9, 0, 0.11, 0), box(w * 0.55, 0.03, w * 0.5, 0, 0.185, 0)]);
+}
+/** a two-link arm: clevis at the base, a link up, an elbow bearing, a link across to a second clevis */
+export function linkArm(L1 = 0.32, L2 = 0.26, ang = 0.9) {
+  const a = linkPlate(L1);
+  const a2 = linkPlate(L1);
+  a.translate(0, 0, 0.035);
+  a2.translate(0, 0, -0.035);
+  const b = linkPlate(L2, 0.06);
+  b.rotateZ(-ang);
+  b.translate(0, L1, 0);
+  const elbow = cyl(0.03, 0.03, 0.12, 12, true, 0, L1, 0);
+  const pin0 = cyl(0.022, 0.022, 0.12, 12, true, 0, 0, 0);
+  const tip = new THREE.Vector3(Math.sin(ang) * L2, L1 + Math.cos(ang) * L2, 0);
+  const pin1 = cyl(0.022, 0.022, 0.1, 12, true, tip.x, tip.y, 0);
+  return merge([a, a2, b, elbow, pin0, pin1]);
 }

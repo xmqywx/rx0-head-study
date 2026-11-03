@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, prismSplit, shellPlate, prismDense, sweep, viewHull, foldedShell, planarPanel} from './geo.js';
 import {ConvexGeometry} from 'three/addons/geometries/ConvexGeometry.js';
 import {mergeGeometries, toCreasedNormals} from 'three/addons/utils/BufferGeometryUtils.js';
-import {bracket, cables, gear, motor, piston, place, rib} from './mechparts.js';
+import {bearing, bracket, cables, clevis, gear, linkArm, linkPlate, motor, piston, place, rib, socket} from './mechparts.js';
 const merge3 = (list) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 
@@ -176,43 +176,59 @@ export function buildHead() {
       const oct = [[-hw + c, zb], [hw - c, zb], [hw, zb + c], [hw, zf - c], [hw - c, zf], [-hw + c, zf], [-hw, zf - c], [-hw, zb + c]];
       mid.push(geoOf((m) => prism(m, oct, 'y', y - 0.04, y + 0.04, 0.015)));
     }
-    // modules between decks, round the perimeter
+    // between the decks: structural posts tying each deck to the next, and in every bay a joint assembly from the
+    // exploded view — a two-link arm on clevises, a bearing joint on a bracket, paired actuators with clevis ends,
+    // or a gear pair on a bearing — each aimed outward, so the interior reads as linked machinery
     for (let i = 0; i < DY.length - 1; i++) {
       const y0 = DY[i] + 0.04;
       const y1 = DY[i + 1] - 0.04;
       const ym = (y0 + y1) / 2;
       const hgt = y1 - y0;
       const {hw, zf, zb, zc} = prof(ym);
+      const rz = (zf - zb) / 2;
       const N = hw > 0.5 ? 10 : 6;
       for (let k = 0; k < N; k++) {
         const a = ((k + 0.5 * (i % 2)) / N) * Math.PI * 2;
-        const h = hash(i * 5.3, k * 2.9);
-        // a point on the deck's outline, and the outward direction there
         const dx = Math.sin(a);
         const dz = Math.cos(a);
-        const p = new V3(dx * hw * 0.82, ym, zc + dz * ((zf - zb) / 2) * 0.82);
-        const n = new V3(dx / hw, 0, dz / ((zf - zb) / 2)).normalize();
-        const w = 0.18 + 0.2 * hash(i, k + 3);
-        if (h < 0.4) {
-          // machined housing: body, a recessed lighter panel, a lip, bolts
-          dark.push(place(merge3([B(w, hgt * 0.92, 0.22, 0, 0, 0.11), B(w * 0.7, hgt * 0.55, 0.03, 0, 0.02, 0.235), B(w * 1.05, 0.04, 0.26, 0, hgt * 0.4, 0.13)]), p, n, UP));
-          mid.push(place(B(w * 0.6, hgt * 0.4, 0.02, 0, 0.02, 0.255), p, n, UP));
-        } else if (h < 0.6) {
-          // paired actuators spanning the bay
-          for (const o of [-0.06, 0.06]) steel.push(place(piston(hgt * 0.95, 0.032), p.clone().add(new V3(-n.z, 0, n.x).multiplyScalar(o)), n, UP));
-          dark.push(place(B(w, 0.06, 0.14, 0, -hgt * 0.42, 0.07), p, n, UP));
+        const n = new V3(dx / hw, 0, dz / rz).normalize();
+        const t = new V3(-n.z, 0, n.x);
+        const p = new V3(dx * hw * 0.8, ym, zc + dz * rz * 0.8);
+        // a post at every other bay boundary
+        if (k % 2 === 0) {
+          const q = new V3(Math.sin(a - Math.PI / N) * hw * 0.86, ym, zc + Math.cos(a - Math.PI / N) * rz * 0.86);
+          dark.push(place(rib(hgt), q, n, UP));
+        }
+        const h = hash(i * 5.3, k * 2.9);
+        if (h < 0.3) {
+          dark.push(place(clevis(0.14, 0.08), p.clone().addScaledVector(UP, -hgt * 0.42), UP, n));
+          steel.push(place(linkArm(hgt * 0.45, hgt * 0.38, 0.8 + h), p.clone().addScaledVector(UP, -hgt * 0.3).addScaledVector(n, 0.06), n, UP, (h - 0.15) * 2));
+        } else if (h < 0.55) {
+          mid.push(place(bracket(0.2, hgt * 0.7), p, n, UP));
+          steel.push(place(bearing(Math.min(0.1, hgt * 0.28)), p.clone().addScaledVector(n, 0.06), n, UP));
+          steel.push(place(linkPlate(hgt * 0.4, 0.06), p.clone().addScaledVector(n, 0.12), n, t, 0.6));
         } else if (h < 0.78) {
-          // gear train on the outer face of a housing
-          dark.push(place(B(w + 0.06, hgt * 0.85, 0.16, 0, 0, 0.08), p, n, UP));
-          steel.push(place(gear(Math.min(hgt * 0.36, 0.14), 16, 0.05), p.clone().addScaledVector(n, 0.16), n, UP, h * 9));
-          steel.push(place(gear(0.06, 10, 0.05), p.clone().addScaledVector(n, 0.16).add(new V3(-n.z, 0.06, n.x).multiplyScalar(0.15)), n, UP, h * 3));
+          for (const o of [-0.07, 0.07]) {
+            steel.push(place(piston(hgt * 0.8, 0.028), p.clone().addScaledVector(t, o), n, UP));
+            dark.push(place(clevis(0.09, 0.05, 0.035), p.clone().addScaledVector(t, o).addScaledVector(UP, -hgt * 0.45), UP, n));
+          }
         } else {
-          // servo block with fins and a cable run up to the next deck
-          mid.push(place(motor(w, hgt * 0.6, 0.18), p, n, UP));
-          dark.push(place(cables([new V3(0, -hgt * 0.45, 0.2), new V3(0.04, 0, 0.26), new V3(0, hgt * 0.45, 0.2)], 0.014), p, n, UP));
+          mid.push(place(socket(0.16), p.clone().addScaledVector(UP, -hgt * 0.35), UP, n));
+          steel.push(place(gear(Math.min(hgt * 0.3, 0.12), 16, 0.04), p.clone().addScaledVector(n, 0.08), n, UP, h * 9));
+          steel.push(place(bearing(0.05, 0.05), p.clone().addScaledVector(n, 0.1).addScaledVector(t, 0.14), n, UP));
         }
       }
     }
+    // the mounting joints, where armor hangs on the frame: mask hinges, horn-root socket, cheek and pod pivots
+    for (const sx of [1, -1]) {
+      const pr = (x, y, z) => new V3(sx * x, y, z);
+      steel.push(place(bearing(0.08, 0.06), pr(0.72, -0.35, 0.72), pr(1, 0, 0.3).normalize(), UP));
+      dark.push(place(clevis(0.16, 0.1), pr(0.66, -0.75, 0.62), pr(1, 0, 0.2).normalize(), UP));
+      steel.push(place(linkArm(0.3, 0.24, 1.1), pr(0.7, -0.6, 0.55), pr(1, 0, 0).normalize(), UP, sx * 0.2));
+      steel.push(place(bearing(0.1, 0.07), pr(0.86, 0.05, -0.3), pr(1, 0, 0), UP));
+      dark.push(place(clevis(0.18, 0.12), pr(0.8, 0.45, -0.25), pr(1, 0.2, 0).normalize(), UP));
+    }
+    mid.push(place(socket(0.24), new V3(0, 1.62, 0.55), UP, new V3(0, 0, 1)));
     // the face recess (behind the faceplate, between the opened mask halves): actuators, the jaw gear train, servos
     for (const sx of [1, -1]) {
       const pr = (x, y, z) => new V3(sx * x, y, z);
@@ -1361,7 +1377,7 @@ export function buildHead() {
     M.redHot.emissiveIntensity = 1.6;
     void beat;
     if (underSheet) underSheet.morphTargetInfluences[0] = p.frame; // the frame pieces push out under the plates
-    if (underSheet) underSheet.visible = explode < 0.25 && p.frame > 0.02; // nothing red before NT-D // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
+    if (underSheet) underSheet.visible = explode < 0.25 && armor > 0.5 && p.frame > 0.02; // nothing red before NT-D; out of the way when the armor is ghosted // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
     M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
     return p;
   };
