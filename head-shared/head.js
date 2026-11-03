@@ -744,7 +744,9 @@ export function buildHead() {
     // Outlines from the Unicorn sheet's front view at 3x (reference/grid/f3-front.png), which wins over the stylised
     // face part sheet: a large upper panel under the visor down to the fold (y −.9), the lower V's front facet to
     // the chin, and its side facet turning back toward the cheek; each a uniform sheet at its own height
-    const U = (pts, lift) => pts.map(([x, y]) => new V3(x, y, mask(x, y) + lift));
+    // the mask half lies on the head's cylinder (axis z .1), so when it turns round that axis in NT-D it stays on it
+    const cylZ = (x, y) => 0.1 + Math.sqrt(Math.max(0.05, (faceZ(y) - 0.1) ** 2 - x * x));
+    const U = (pts, lift) => pts.map(([x, y]) => new V3(x, y, cylZ(x, y) + lift));
     let wallX = null;
     let wallBackZ = null;
     let wallFrontZ = null;
@@ -765,7 +767,7 @@ export function buildHead() {
       const ox = (y) => (y > -0.45 ? 0.72 + (0.1 / 0.55) * (y - 0.1) : 0.62 + (0.12 / 0.55) * (y + 0.45)); // the outer edge
       // the side wall leaves the front facet at ~142° (top view: back 1, out .5) so it wraps the face, and stops at
       // the red frame's Z (back edge depths from the Destroy side view, shortened to stay on the head)
-      const zf = (y) => mask(Math.min(ox(y), 0.74), y) + 0.03;
+      const zf = (y) => cylZ(ox(y) + 0.02, y) + 0.03;
       const rW = (y) => Math.hypot(ox(y) + 0.02, zf(y) - CYL);
       const phiF = (y) => Math.atan2(ox(y) + 0.02, zf(y) - CYL);
       const W = YS.map((y) => new V3(ox(y) + 0.02, y, zf(y)));
@@ -860,7 +862,7 @@ export function buildHead() {
       // and the L in the fold between the half's inner panel and outer facet, seen from the front
       {
         const F = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]]; // the fold between the inner panel and the outer facet: the sheet's L, left visible beside layer 2
-        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.07);
+        const fa = ([x, y], d) => new V3(s * (x + d), y, cylZ(x + d, y) + 0.07);
         const m3 = new Mesher();
         const fl = (w0, w1) => {
           for (let k = 0; k < F.length - 1; k++) {
