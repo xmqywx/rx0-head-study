@@ -8,6 +8,8 @@ import * as THREE from 'three';
 import {D2R, loftBody, makeSurface, Mesher, mirrorX, prism, prismSplit, shellPlate, prismDense, sweep, viewHull, foldedShell, planarPanel} from './geo.js';
 import {ConvexGeometry} from 'three/addons/geometries/ConvexGeometry.js';
 import {mergeGeometries, toCreasedNormals} from 'three/addons/utils/BufferGeometryUtils.js';
+import {bracket, cables, gear, motor, piston, place, rib} from './mechparts.js';
+const merge3 = (list) => mergeGeometries(list.map((g) => (g.index ? g.toNonIndexed() : g)));
 import {CROWN, FACE, FIN, FRAME_RISE, HORN, MASK, pose} from './kin.js';
 
 const V3 = THREE.Vector3;
@@ -135,37 +137,90 @@ export function buildHead() {
   };
 
   // ---------------------------------------------------------------- inner frame skull
-  // Not a smooth egg: courses of graphite blocks bolted round a dark core, every course offset like brickwork, block
-  // heights varied so the surface steps. Merged into one mesh per material.
+  // A machine, not an egg (reference/rx0-head-internal-exploded-view.png): a central spine carrying six machined
+  // decks that follow the head's profile, and between the decks, round the perimeter, chunky modules — machined
+  // housings with recessed panels, paired actuators, gear trains on the outer faces, servo blocks — at the scale the
+  // exploded view draws them (.2–.45 units), each one aimed outward. Merged into one mesh per material.
   const skull = new THREE.Group();
-  skull.add(mesh(loftBody(core, [-1.2, -0.85, -0.55, -0.1, 0.3, 0.65, 0.95, 1.2, 1.4, 1.58, 1.72, 1.84, 1.9, 1.97], 24), M.frame, false));
   {
     const hash = (i, j) => {
       const x = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
       return x - Math.floor(x);
     };
-    const COURSES = [-1.18, -0.82, -0.46, -0.1, 0.25, 0.6, 0.92, 1.22, 1.48, 1.7, 1.86];
-    const geos = [[], [], []];
-    for (let i = 0; i < COURSES.length - 1; i++) {
-      const y0 = COURSES[i];
-      const y1 = COURSES[i + 1];
-      const step = i > 7 ? 30 : 20;
-      const shift = (i % 2) * step * 0.5;
-      for (let u = -180 + shift; u < 180 + shift - 0.1; u += step) {
-        const h = hash(i, u);
-        const w = step * (h > 0.8 ? 1 : 1);
-        const t = 0.04 + 0.06 * hash(u, i + 9);
-        // some blocks split in two along their height for a busier, machined surface
-        const split = h > 0.6 && y1 - y0 > 0.28;
-        const parts = split ? [[y0, (y0 + y1) / 2], [(y0 + y1) / 2, y1]] : [[y0, y1]];
-        for (const [a0, a1] of parts) {
-          const g = shellPlate(core, {ub: [u, u + w], ut: [u, u + w], y: [a0, a1]}, {t: t * (split ? 1.25 : 1), gap: 0.018, bevel: 0.016, nu: w > 24 ? 2 : 1}).geo;
-          geos[h < 0.45 ? 0 : h < 0.85 ? 1 : 2].push(g);
+    const dark = [];
+    const mid = [];
+    const steel = [];
+    const UP = new V3(0, 1, 0);
+    const B = (w, h, d, x, y, z) => {
+      const g = new THREE.BoxGeometry(w, h, d).toNonIndexed();
+      g.deleteAttribute('uv');
+      g.translate(x, y, z);
+      return g;
+    };
+    // the spine
+    dark.push(B(0.42, 3.0, 0.5, 0, 0.35, -0.2));
+    const DY = [-1.12, -0.62, -0.12, 0.38, 0.88, 1.36, 1.72];
+    const prof = (y) => {
+      const [hw, zf, zb] = core.at(y);
+      return {hw: hw * 0.9, zf: zf * 0.9, zb: zb * 0.9, zc: (zf + zb) / 2};
+    };
+    // decks: chamfered octagons at each level
+    for (const y of DY) {
+      const {hw, zf, zb} = prof(y);
+      const c = Math.min(hw, (zf - zb) / 2) * 0.35;
+      const oct = [[-hw + c, zb], [hw - c, zb], [hw, zb + c], [hw, zf - c], [hw - c, zf], [-hw + c, zf], [-hw, zf - c], [-hw, zb + c]];
+      mid.push(geoOf((m) => prism(m, oct, 'y', y - 0.04, y + 0.04, 0.015)));
+    }
+    // modules between decks, round the perimeter
+    for (let i = 0; i < DY.length - 1; i++) {
+      const y0 = DY[i] + 0.04;
+      const y1 = DY[i + 1] - 0.04;
+      const ym = (y0 + y1) / 2;
+      const hgt = y1 - y0;
+      const {hw, zf, zb, zc} = prof(ym);
+      const N = hw > 0.5 ? 10 : 6;
+      for (let k = 0; k < N; k++) {
+        const a = ((k + 0.5 * (i % 2)) / N) * Math.PI * 2;
+        const h = hash(i * 5.3, k * 2.9);
+        // a point on the deck's outline, and the outward direction there
+        const dx = Math.sin(a);
+        const dz = Math.cos(a);
+        const p = new V3(dx * hw * 0.82, ym, zc + dz * ((zf - zb) / 2) * 0.82);
+        const n = new V3(dx / hw, 0, dz / ((zf - zb) / 2)).normalize();
+        const w = 0.18 + 0.2 * hash(i, k + 3);
+        if (h < 0.4) {
+          // machined housing: body, a recessed lighter panel, a lip, bolts
+          dark.push(place(merge3([B(w, hgt * 0.92, 0.22, 0, 0, 0.11), B(w * 0.7, hgt * 0.55, 0.03, 0, 0.02, 0.235), B(w * 1.05, 0.04, 0.26, 0, hgt * 0.4, 0.13)]), p, n, UP));
+          mid.push(place(B(w * 0.6, hgt * 0.4, 0.02, 0, 0.02, 0.255), p, n, UP));
+        } else if (h < 0.6) {
+          // paired actuators spanning the bay
+          for (const o of [-0.06, 0.06]) steel.push(place(piston(hgt * 0.95, 0.032), p.clone().add(new V3(-n.z, 0, n.x).multiplyScalar(o)), n, UP));
+          dark.push(place(B(w, 0.06, 0.14, 0, -hgt * 0.42, 0.07), p, n, UP));
+        } else if (h < 0.78) {
+          // gear train on the outer face of a housing
+          dark.push(place(B(w + 0.06, hgt * 0.85, 0.16, 0, 0, 0.08), p, n, UP));
+          steel.push(place(gear(Math.min(hgt * 0.36, 0.14), 16, 0.05), p.clone().addScaledVector(n, 0.16), n, UP, h * 9));
+          steel.push(place(gear(0.06, 10, 0.05), p.clone().addScaledVector(n, 0.16).add(new V3(-n.z, 0.06, n.x).multiplyScalar(0.15)), n, UP, h * 3));
+        } else {
+          // servo block with fins and a cable run up to the next deck
+          mid.push(place(motor(w, hgt * 0.6, 0.18), p, n, UP));
+          dark.push(place(cables([new V3(0, -hgt * 0.45, 0.2), new V3(0.04, 0, 0.26), new V3(0, hgt * 0.45, 0.2)], 0.014), p, n, UP));
         }
       }
     }
-    const MATS = [M.frame, M.frameMid, M.steel];
-    for (const [k, list] of geos.entries()) if (list.length) skull.add(mesh(mergeGeometries(list), MATS[k], false));
+    // the face recess (behind the faceplate, between the opened mask halves): actuators, the jaw gear train, servos
+    for (const sx of [1, -1]) {
+      const pr = (x, y, z) => new V3(sx * x, y, z);
+      const fwd = new V3(0, 0, 1);
+      steel.push(place(piston(0.5, 0.04), pr(0.32, -0.55, 0.78), fwd, new V3(sx * 0.3, 1, 0)));
+      steel.push(place(piston(0.36, 0.03), pr(0.55, -0.2, 0.72), fwd, new V3(-sx * 0.4, 1, 0)));
+      steel.push(place(gear(0.11, 16), pr(0.5, -0.82, 0.74), fwd, UP, 0.3));
+      steel.push(place(gear(0.06, 10), pr(0.62, -0.68, 0.76), fwd, UP, 0.1));
+      mid.push(place(motor(0.16, 0.12, 0.08), pr(0.2, -1.05, 0.7), fwd, UP));
+      mid.push(place(bracket(0.2, 0.18), pr(0.62, 0.05, 0.66), fwd, UP));
+      dark.push(place(cables([pr(0.1, 0.0, 0.0), pr(0.2, -0.3, 0.06), pr(0.12, -0.7, 0.02)]), pr(0.15, -0.3, 0.74), fwd, UP));
+    }
+    for (const [list, mat] of [[dark, M.frame], [mid, M.frameMid], [steel, M.steel]]) if (list.length) skull.add(mesh(mergeGeometries(list), mat, false));
   }
 
   // ---------------------------------------------------------------- psycho-frame: red parts, not lights
@@ -640,6 +695,7 @@ export function buildHead() {
         pv.rotation.set(HORN.pitch * D2R * p.horn, 0, -s * a); // split in the face plane, then lean the V back
         pv.position.set(s * (0.02 + HORN.spread * p.horn), 0.06 - HORN.drop * p.horn, 0);
         h.position.y = -0.06 - HORN.sink * p.horn;
+        h.scale.x = 1 + 1.3 * p.horn; // each half opens out into a broad blade (Destroy sheet)
       }
     });
     anchors.horn = {obj: halves[0].pv, p: new V3(0.05, 3.1, 1.36)};
@@ -709,7 +765,10 @@ export function buildHead() {
     // visor band (f3-front): centre .03 / −.13, outer end x .92 at .30 / .15, on the face surface
     // visor band (f3-front at 3x): centre .17 / −.03, it rises to the outer end x .92 at .40 / .28, sitting just above the mask panel's top edge
     const visor = mk((m) => prismDense(m, [[0.006, 0.1], [0.006, -0.16], [0.6, 0.05], [0.82, 0.16], [0.82, 0.37], [0.6, 0.31]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
-    const pv = pivot(new V3(s * 0.48, -0.55, 1.15), mesh(shell, M.white), mesh(jaw, M.frame, false));
+    const pv = pivot(new V3(s * 0.74, -0.5, 1.0), mesh(shell, M.white)); // hinge on the outer edge
+    const jawG = new THREE.Group();
+    jawG.add(mesh(jaw, M.frame, false));
+    add(jawG, new V3(0, -0.2, 0.3), (p, obj) => (obj.visible = p.mask < 0.05)); // only behind the closed mask
     const vg = new THREE.Group();
     vg.add(mesh(visor, M.visor, false));
     // the visor retracts into the brow before the mask halves part
@@ -956,9 +1015,9 @@ export function buildHead() {
     for (const l of inkLines) l.visible = ink;
     // psycho-frame: dull red at rest, a breathing glow as NT-D builds
     const beat = 0.5 + 0.5 * Math.sin(time * (2.2 + 2 * p.frame));
-    M.red.emissiveIntensity = p.frame * (0.9 + 0.7 * beat);
+    M.red.emissiveIntensity = p.frame * (0.55 + 0.35 * beat);
     M.red.color.copy(RED_OFF).lerp(RED_ON, p.frame);
-    M.green.emissiveIntensity = 0.04 + 2.5 * p.eyes;
+    M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
     return p;
   };
   const anchorWorld = (k, out = tmp) => {

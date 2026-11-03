@@ -12,7 +12,7 @@ await p.waitForFunction(() => window.__head && window.__ready, null, {timeout: 3
 const shots = [['face', 'face', 0, 0, 1], ['q-left', '3/4', 0.1, 0.05, 0.75], ['q-right', '3/4', -1.1, 0.05, 0.75], ['side', 'side', 0, 0, 0.8], ['back', 'back', 0, 0, 0.8]];
 const files = [];
 for (const [name, view, az, el, zoom] of shots) {
-  await p.evaluate(([v, az, el, zoom]) => { const H = window.__head; H.setTour(false); Object.assign(H.S, {d: 0, dTarget: 0, labels: false}); H.setView(v); setTimeout(() => { H.S.uAz = az; H.S.uEl = el; H.S.uZoom = zoom; }, 1400); }, [view, az, el, zoom]);
+  await p.evaluate(([v, az, el, zoom, d]) => { const H = window.__head; H.setTour(false); Object.assign(H.S, {d, dTarget: d, labels: false}); H.setView(v); setTimeout(() => { H.S.uAz = az; H.S.uEl = el; H.S.uZoom = zoom; }, 1400); }, [view, az, el, zoom, +(process.env.D || 0)]);
   await p.waitForTimeout(3000);
   const f = out.replace('.png', `-${name}.png`);
   await p.screenshot({path: f, clip: {x: 400, y: 40, width: 800, height: 800}});
