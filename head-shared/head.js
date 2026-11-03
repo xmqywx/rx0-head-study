@@ -407,73 +407,78 @@ export function buildHead() {
 
   // ---------------------------------------------------------------- brow and forehead block (main camera, horn root)
   // ---------------------------------------------------------------- forehead: folded sheet armor
-  // Read at 3x off the Unicorn sheet (reference/grid/fh-front*.png: x, y; fh-side*.png: z, y). Every piece is a
-  // sheet of one thickness folded into shape (foldedShell), as the exploded view shows them: a U-channel column
-  // under the horn; the central plate folded down its centre line, again at the camera (the side view's notch) and
-  // again at the chevron into the beak that reaches the visor; four flat wing panels either side on one shallow
-  // plane; dark slits in the gaps.
+  // Read at 3–4x off the Unicorn sheet (reference/grid/fh-front*.png x,y · fh-side4.png z,y · fh-top4.png x,z).
+  // Every piece is one sheet folded (foldedShell), each fold at the angle the three views give it:
+  //  · column: a U-channel (front z 1.08, sides to .5) with a shallow vertical groove on each side (side view)
+  //  · upper plate: a ridge down the centre line, each half turning back 32° (top view), down to the camera step
+  //  · camera step: the upper plate ends at a ledge (y .82) that steps back .09 to the window; the window's frame is
+  //    the ledge's walls; the lower plate starts under the window (y .62) and stands proud again
+  //  · lower plate: ridge on the centre line (z 1.66 at the prow tip, y .47), the two halves turning back 30° and
+  //    folding at the chevron into the beak, whose lower edge is a point at the visor (y .03, z 1.42)
+  //  · wings: one sheet each side folded on a diagonal (upper face sloping back up to the crown, lower face sloping
+  //    down to the visor) and again at the outer corner into the side face; a wedge-shaped dark slot beside the column
   const browGroup = new THREE.Group();
   const T = 0.07;
   const P3 = (x, y, z) => new V3(x, y, z);
-  const mirrorFacets = (fs) => [...fs, ...fs.map((f) => f.map((v) => new V3(-v.x, v.y, v.z)))];
+  const MX = (fs) => [...fs, ...fs.map((f) => f.map((v) => new V3(-v.x, v.y, v.z)))];
   {
-    // the column: front face z 1.08, sides back to z .55, open top (the horn) and bottom (the plate)
     const col = geoOf((m) =>
       foldedShell(m, [
-        [P3(-0.28, 1.18, 1.08), P3(0.28, 1.18, 1.08), P3(0.28, 1.75, 1.08), P3(-0.28, 1.75, 1.08)],
-        [P3(0.28, 1.18, 1.08), P3(0.28, 1.18, 0.55), P3(0.28, 1.75, 0.55), P3(0.28, 1.75, 1.08)],
-        [P3(-0.28, 1.18, 1.08), P3(-0.28, 1.18, 0.55), P3(-0.28, 1.75, 0.55), P3(-0.28, 1.75, 1.08)],
-      ], T, {centre: new V3(0, 1.46, 0.75)}),
+        [P3(-0.26, 1.3, 1.02), P3(0.26, 1.3, 1.02), P3(0.26, 1.75, 1.02), P3(-0.26, 1.75, 1.02)],
+        [P3(0.26, 1.3, 1.02), P3(0.26, 1.3, 0.5), P3(0.26, 1.75, 0.5), P3(0.26, 1.75, 1.02)],
+        [P3(-0.26, 1.3, 1.02), P3(-0.26, 1.3, 0.5), P3(-0.26, 1.75, 0.5), P3(-0.26, 1.75, 1.02)],
+      ], T, {centre: new V3(0, 1.45, 0.7)}),
     );
     browGroup.add(mesh(col, M.white));
-    // the central plate: right-half facets, mirrored. Centre-line profile z 1.08 @1.18 → 1.30 @.80 (camera notch) →
-    // 1.66 @.47 (prow tip) → 1.58 @.37 (chevron apex) → 1.42 @.03 (beak bottom); the halves turn back .12 at x .37
-    const right = [
-      [P3(0, 1.18, 1.08), P3(0, 0.8, 1.3), P3(0.37, 0.8, 1.18), P3(0.47, 1.1, 0.96), P3(0.35, 1.18, 1.0)],
-      [P3(0, 0.8, 1.3), P3(0, 0.47, 1.66), P3(0.32, 0.63, 1.35), P3(0.37, 0.8, 1.18)],
-      [P3(0, 0.47, 1.66), P3(0, 0.03, 1.42), P3(0.32, 0.63, 1.35)],
-      [P3(0, 0.03, 1.42), P3(0.35, 0.1, 1.25), P3(0.32, 0.63, 1.35)],
-    ];
-    const plate = geoOf((m) => foldedShell(m, mirrorFacets(right), T, {centre: new V3(0, 0.65, 0.75)}));
-    browGroup.add(mesh(plate, M.white));
-    // the camera: a grey frame proud of the plate, the dark window inside it, the lens that lights with the eyes;
-    // the plate's centre profile through the window: z(y) = 1.08 + .58 (1.18 − y) above .8, 1.30 + 1.09 (.8 − y) below
-    const zc = (y) => (y >= 0.8 ? 1.08 + 0.58 * (1.18 - y) : 1.3 + 1.09 * (0.8 - y));
-    const camHull = (hw, y0, y1, lift, x0 = -hw, x1 = hw) =>
-      geoOf((m) => {
-        for (const [a, b] of [[y0, Math.min(0.8, y1)], [Math.max(0.8, y0), y1]])
-          if (b > a + 1e-6) viewHull(m, {front: [[x0, a], [x1, a], [x1, b], [x0, b]], side: [[0.9, a], [zc(a) + lift, a], [zc(b) + lift, b], [0.9, b]]});
-      });
-    browGroup.add(mesh(camHull(0.12, 0.62, 0.98, 0.02), M.lens, false));
-    const cam = mesh(camHull(0.07, 0.68, 0.92, 0.03), M.green, false);
-    // rim: four grey strips round the window
-    const rim = geoOf((m) => {
-      for (const [x0, x1, y0, y1] of [[-0.15, 0.15, 0.98, 1.01], [-0.15, 0.15, 0.59, 0.62], [-0.15, -0.12, 0.59, 1.01], [0.12, 0.15, 0.59, 1.01]])
-        m.p.push(...camHull(0, y0, y1, 0.035, x0, x1).attributes.position.array);
-    });
-    browGroup.add(mesh(rim, M.grey, false));
+    // grooves on the column sides and the small raised tab at its front top (side view)
+    browGroup.add(mesh(geoOf((m) => prism(m, [[0.62, 1.36], [0.7, 1.36], [0.7, 1.66], [0.62, 1.66]], 'x', 0.2, 0.267, 0.004, {mirror: true})), M.lens, false));
+    browGroup.add(mesh(geoOf((m) => foldedShell(m, [[P3(-0.1, 1.42, 1.03), P3(0.1, 1.42, 1.03), P3(0.1, 1.62, 1.1), P3(-0.1, 1.62, 1.1)]], 0.04, {centre: new V3(0, 1.5, 0.5)})), M.white));
+    // upper plate: ridge (0, y, zr) with halves to x .36 turning back; zr 1.08 at the column, 1.2 at the ledge
+    const upper = MX([
+      [P3(0, 1.3, 1.04), P3(0, 1.12, 1.12), P3(0.36, 1.12, 0.92), P3(0.3, 1.3, 0.86)],
+    ]);
+    // the ledge: a step back from the upper plate's bottom edge to the window plane (z −.09), closing the sheet
+    const ledge = MX([[P3(0, 1.12, 1.12), P3(0, 1.12, 0.98), P3(0.36, 1.12, 0.78), P3(0.36, 1.12, 0.92)]]);
+    browGroup.add(mesh(geoOf((m) => foldedShell(m, [...upper, ...ledge], T, {centre: new V3(0, 1.0, 0.5)})), M.white));
+    // window plane and frame: the recess between the two plates, x ±.145, y .62–.82, its floor at z −.2 from the ledge
+    const win = geoOf((m) =>
+      foldedShell(m, MX([
+        [P3(0, 1.12, 0.98), P3(0, 0.5, 1.26), P3(0.25, 0.5, 1.2), P3(0.25, 1.12, 0.92)], // floor
+        [P3(0.25, 0.5, 1.2), P3(0.25, 1.12, 0.92), P3(0.25, 1.12, 0.78), P3(0.25, 0.5, 1.06)], // side wall
+      ]), 0.03, {centre: new V3(0, 0.72, 0.4)}),
+    );
+    browGroup.add(mesh(win, M.grey, false));
+    const floorZ = (y) => 0.98 + (0.28 * (1.12 - y)) / 0.62;
+    browGroup.add(mesh(geoOf((m) => prism(m, [[-0.16, 0.55], [0.16, 0.55], [0.16, 1.0], [-0.16, 1.0]], 'z', 0.8, (x, y) => floorZ(y) + 0.012, 0.004)), M.lens, false));
+    const cam = mesh(geoOf((m) => prism(m, [[-0.1, 0.62], [0.1, 0.62], [0.1, 0.93], [-0.1, 0.93]], 'z', 0.8, (x, y) => floorZ(y) + 0.02, 0.004)), M.green, false);
     browGroup.add(cam);
-    anchors.camera = {obj: cam, p: new V3(0, 0.8, 1.36)};
-    // wing panels (sheet px → units), each a flat panel on its own shallow plane, mirrored
-    const pinkZ = (x, y) => 1.724 - 0.256 * x - 0.386 * y;
-    const blueZ = (x, y) => 1.727 - 0.364 * x - 0.358 * y;
-    const lowZ = (x, y) => 1.366 - 0.425 * x + 0.2485 * y;
-    const yelZ = (x) => 1.11 - 0.6 * (x - 0.76);
-    const wings = geoOf((m) => {
-      planarPanel(m, [[0.31, 1.67], [0.56, 1.77], [0.93, 1.13], [0.89, 0.93], [0.76, 0.95], [0.76, 1.1], [0.36, 1.3]], pinkZ, {t: T, mirror: true});
-      planarPanel(m, [[0.36, 1.3], [0.47, 1.1], [0.36, 0.63], [0.76, 0.67], [0.76, 1.1]], blueZ, {t: T, mirror: true});
-      planarPanel(m, [[0.36, 0.63], [0.35, 0.13], [0.76, 0.3], [0.76, 0.67]], lowZ, {t: T, mirror: true});
-      planarPanel(m, [[0.76, 0.95], [0.76, 0.3], [1.0, 0.33], [1.03, 0.9], [0.89, 0.93]], yelZ, {t: T, mirror: true});
+    anchors.camera = {obj: cam, p: new V3(0, 0.78, 1.14)};
+    // lower plate: from under the window (y .62, ridge z 1.5) to the prow tip, chevron, beak point
+    const lower = MX([
+      [P3(0, 0.5, 1.6), P3(0, 0.47, 1.66), P3(0.33, 0.55, 1.36), P3(0.36, 0.5, 1.34)], // half, above the prow line
+      [P3(0, 0.47, 1.66), P3(0, 0.34, 1.6), P3(0.3, 0.42, 1.32), P3(0.33, 0.55, 1.36)], // half, down to the chevron
+      [P3(0, 0.34, 1.6), P3(0, 0.03, 1.42), P3(0.3, 0.42, 1.32)], // beak face
+      [P3(0, 0.03, 1.42), P3(0.34, 0.1, 1.24), P3(0.3, 0.42, 1.32)], // beak's outer face
+    ]);
+    // the lip under the window: the lower plate's top edge turns up to meet the window floor
+    const lip = MX([[P3(0, 0.5, 1.6), P3(0.36, 0.5, 1.34), P3(0.25, 0.5, 1.2), P3(0, 0.5, 1.26)]]);
+    browGroup.add(mesh(geoOf((m) => foldedShell(m, [...lower, ...lip], T, {centre: new V3(0, 0.4, 0.6)})), M.white));
+    // wings: each a sheet with a diagonal fold (from the inner top (.36,1.3) down to the outer bottom (.95,.33))
+    // and an outer fold into the side face; corner depths from the side view
+    const wing = [
+      [P3(0.36, 1.3, 0.96), P3(0.56, 1.5, 0.8), P3(0.93, 1.13, 0.58), P3(0.95, 0.4, 0.9)], // upper face: back up to the crown
+      [P3(0.36, 1.3, 0.96), P3(0.95, 0.4, 0.9), P3(0.78, 0.3, 1.16), P3(0.35, 0.13, 1.28), P3(0.37, 0.65, 1.2)], // lower face: forward and down
+      [P3(0.93, 1.13, 0.58), P3(1.05, 0.95, 0.42), P3(1.05, 0.42, 0.56), P3(0.95, 0.4, 0.9)], // side face
+    ];
+    browGroup.add(mesh(geoOf((m) => foldedShell(m, MX(wing), T, {centre: new V3(0, 0.75, 0.3)})), M.white));
+    // the wedge slot between column and wing, and the slit on the wing's outer upper edge
+    const slots = geoOf((m) => {
+      foldedShell(m, MX([[P3(0.28, 1.2, 1.02), P3(0.36, 1.3, 0.98), P3(0.36, 0.86, 0.98), P3(0.3, 0.86, 1.0)]]), 0.02, {centre: new V3(0, 1.0, 0.3)});
+      prism(m, [[0.78, 0.9], [0.86, 0.92], [0.86, 1.1], [0.78, 1.06]], 'z', 0.4, 0.66, 0.004, {mirror: true});
     });
-    browGroup.add(mesh(wings, M.white));
-    // dark slits: beside the column, and at the blue/yellow boundary
-    const slits = geoOf((m) => {
-      prism(m, [[0.29, 1.2], [0.37, 1.2], [0.37, 1.5], [0.29, 1.5]], 'z', 0.6, 1.0, 0.004, {mirror: true});
-      prism(m, [[0.73, 0.67], [0.83, 0.67], [0.83, 1.03], [0.73, 1.03]], 'z', 0.9, (x) => blueZ(x, 0.85) - 0.02, 0.004, {mirror: true});
-    });
-    browGroup.add(mesh(slits, M.lens, false));
+    browGroup.add(mesh(slots, M.lens, false));
     add(browGroup, new V3(0, 0.2, 1.0), (p, obj) => obj.position.add(new V3(0, 0.06 * p.crown, 0.04 * p.crown)));
-    anchors.brow = {obj: browGroup, p: new V3(0.62, 1.3, 1.1)};
+    anchors.brow = {obj: browGroup, p: new V3(0.62, 1.2, 1.0)};
   }
 
   // ---------------------------------------------------------------- horn: two segmented halves on a split hinge
