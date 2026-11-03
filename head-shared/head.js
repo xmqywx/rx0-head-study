@@ -147,6 +147,9 @@ export function buildHead() {
   // housings with recessed panels, paired actuators, gear trains on the outer faces, servo blocks — at the scale the
   // exploded view draws them (.2–.45 units), each one aimed outward. Merged into one mesh per material.
   const skull = new THREE.Group();
+  // the inner skin the frame plates retract behind (hidden when the armor is ghosted or exploded, to show the machine)
+  const innerSkin = mesh(loftBody(core, [-1.2, -0.85, -0.55, -0.1, 0.3, 0.65, 0.95, 1.2, 1.4, 1.58, 1.72, 1.84], 24), M.frame, false);
+  root.add(innerSkin);
   {
     const hash = (i, j) => {
       const x = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
@@ -417,7 +420,7 @@ export function buildHead() {
       const nn = new V3(1, -r.y * 0.5, -r.x * 0.5).normalize();
       for (const s of [1, -1]) {
         const g = new THREE.Group();
-        g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white));
+        g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white, 40));
         const ns = nn.clone();
         ns.x *= s;
         add(g, ns.clone().multiplyScalar(1.1).add(new V3(0, 0.2, 0)), (p, obj) => {
@@ -533,6 +536,7 @@ export function buildHead() {
   //  F-06/07 crown  the crown-side plate above it, folded 150° along a line from the plate's corner to its top edge
   //  brow           the lower brow plate from the plate down to the visor's top edge
   const browGroup = new THREE.Group();
+  browGroup.userData.noRed = true;
   const T = 0.07;
   const P3 = (x, y, z) => new V3(x, y, z);
   const MX = (fs) => [...fs, ...fs.map((f) => f.map((v) => new V3(-v.x, v.y, v.z)))];
@@ -1377,7 +1381,9 @@ export function buildHead() {
     M.redHot.emissiveIntensity = 1.6;
     void beat;
     if (underSheet) underSheet.morphTargetInfluences[0] = p.frame; // the frame pieces push out under the plates
-    if (underSheet) underSheet.visible = explode < 0.25 && armor > 0.5 && p.frame > 0.02; // nothing red before NT-D; out of the way when the armor is ghosted // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
+    // the frame plates are always there: retracted behind the inner skin in Unicorn Mode, they slide out as NT-D runs
+    if (underSheet) underSheet.visible = explode < 0.25 && armor > 0.5;
+    innerSkin.visible = explode < 0.25 && armor > 0.5; // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
     M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
     return p;
   };
@@ -1404,17 +1410,19 @@ export function buildHead() {
     };
     void skip;
     const C = new V3(0, 0.3, -0.2);
-    const list = redPlates.map((g0) => {
+    const list = [];
+    for (const g0 of redPlates) {
       let g = g0.index ? g0.toNonIndexed() : g0.clone();
       for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
       g.computeBoundingBox();
       const c = g.boundingBox.getCenter(new V3());
+      if (c.z > 0.45 && c.y < 1.3) continue; // the face area has its own frame parts (eye bars, mask L): no plate copies there
       const out = c.clone().sub(C).normalize();
       // retracted inside (Unicorn Mode) → in place under its plate (NT-D): a straight push, no shape change
       const lo = g.clone();
       lo.translate(-out.x * 0.5, -out.y * 0.5, -out.z * 0.5);
-      return [lo, g];
-    });
+      list.push([lo, g]);
+    }
     const base = mergeGeometries(list.map((q) => q[0]));
     const raised = mergeGeometries(list.map((q) => q[1]));
     base.morphAttributes.position = [raised.attributes.position];
