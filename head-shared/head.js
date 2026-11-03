@@ -928,28 +928,28 @@ export function buildHead() {
     // y −1.2, bottom 1.26 at −1.46). All folded sheets / three-view solids, no flat slab.
     // Destroy sheet: ±.6 at the top edge (y −.05), tapering to ±.22 at the chin (y −.70)
     // recessed between the opened mask halves (Destroy side sheet: the halves' front edges stand proud of it)
-    const ROWS = [[-0.05, 0.56, 1.0], [-0.4, 0.44, 0.97], [-0.7, 0.2, 0.96]]; // inside the mask halves' U (S-03), not in front of it
+    const ROWS = [[-0.05, 0.58, 1.1], [-0.4, 0.5, 1.07], [-0.7, 0.26, 1.02]]; // edges tucked just under the mask halves' backs: no gap // inside the mask halves' U (S-03), not in front of it
     const P = (x, y, z) => new V3(x, y, z);
     const facets = [];
     for (let i = 0; i < 2; i++) {
       const [y0, w0, z0] = ROWS[i];
       const [y1, w1, z1] = ROWS[i + 1];
-      const R = 0.2; // the ridge stands this far in front of the edges: each half folds back ~20° to follow the face
+      const R = 0.13; // the ridge stands this far in front of the edges: each half folds back to meet the mask halves
       const C0 = P(0, y0, z0 + R);
       const C1 = P(0, y1, z1 + R);
       for (const sx of [1, -1]) {
         const A = P(sx * w0, y0, z0);
         const B = P(sx * w1, y1, z1);
         facets.push([C0, A, B], [C0, B, C1]);
-        const d = P(sx * 0.05, 0, -0.2); // side bevel folding back toward the mask halves
+        const d = P(sx * 0.06, 0, -0.1); // short side bevel under the mask halves
         facets.push([A, B, B.clone().add(d)], [A, B.clone().add(d), A.clone().add(d)]);
       }
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.0 + 0.2 + (0.03 / 0.35) * (y + 0.05); // on the ridge
+    const faceZ = (y) => 1.1 + 0.13 + (0.03 / 0.35) * (y + 0.05); // on the ridge
     // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.2, -0.31, -0.42])
-      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.36 * Math.abs(x) + 0.012, 0.006, {mirror: true})), M.lens, false));
+      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.23 * Math.abs(x) + 0.012, 0.006, {mirror: true})), M.lens, false));
     const chin = mesh(
       geoOf((m) =>
         viewHull(m, {
