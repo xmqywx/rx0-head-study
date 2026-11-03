@@ -632,14 +632,15 @@ export function buildHead() {
       const pivotC = new V3(0, cy, zi);
       tilt.position.copy(pivotC);
       tilt.children.forEach((c) => c.position.sub(pivotC));
-      tilt.rotation.x = 0; // flat
+      tilt.rotation.x = -0.42; // lies in the plane of the forehead plate around it (leaning back ~24°), flush, not standing up
       camUnit.add(tilt);
       camUnit.userData.red = new THREE.Object3D();
       anchors.camera = {obj: cam, p: new V3(0, cy, zi + 0.02)};
       camUnit.userData.noRed = true;
       add(camUnit, new V3(0, 0.6, 0.6), (p, obj) => {
         const t = p.crown;
-        obj.position.add(new V3(0, 0.25 * t, 0.06 * Math.min(1, t * 2))); // only a short rise
+        // rides with the forehead (which moves +.04 y, +.06 z in NT-D) plus a short rise of its own, staying set in the recess
+        obj.position.add(new V3(0, 0.04 * t + 0.09 * t, 0.06 * t));
         obj.userData.red.position.z = -0.2 * (1 - t); // the frame either side slides out behind it
       });
     }
