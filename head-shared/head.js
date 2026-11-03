@@ -874,7 +874,12 @@ export function buildHead() {
       false,
     );
     // the dark jaw behind the shield and beside the chin (sheet: dark grey parts round the chin, no opening)
-    g.add(mesh(geoOf((m) => prism(m, [[-0.5, -0.1], [0.5, -0.1], [0.5, -0.9], [0.3, -1.3], [-0.3, -1.3], [-0.5, -0.9]], 'z', 0.85, 1.05, 0.02)), M.frame, false));
+    {
+      const jw = new THREE.Group();
+      jw.add(mesh(geoOf((m) => prism(m, [[-0.5, -0.1], [0.5, -0.1], [0.5, -0.9], [0.3, -1.3], [-0.3, -1.3], [-0.5, -0.9]], 'z', 0.75, 0.95, 0.02)), M.frame, false));
+      jw.userData.noRed = true;
+      add(jw, new V3(0, 0, 0));
+    }
     // the chin rides up inside the face in Unicorn Mode and drops into place as the faceplate rolls out
     const chinG = new THREE.Group();
     chinG.add(chin);
@@ -1135,9 +1140,11 @@ export function buildHead() {
     for (const l of inkLines) l.visible = ink;
     // psycho-frame: dull red at rest, a breathing glow as NT-D builds
     const beat = 0.5 + 0.5 * Math.sin(time * (2.2 + 2 * p.frame));
-    M.red.emissiveIntensity = p.frame * (1.0 + 0.5 * beat);
-    M.redHot.emissiveIntensity = p.frame * (1.8 + 0.6 * beat);
+    M.red.emissiveIntensity = 0.9; // a lit red part, the same in both modes; only its position changes
+    M.redHot.emissiveIntensity = 1.6;
+    void beat;
     if (underSheet) underSheet.morphTargetInfluences[0] = p.frame; // the frame pieces push out under the plates
+    if (underSheet) underSheet.visible = explode < 0.25; // it is a copy of the shell's footprint: in the exploded view the frame shows as the core's own parts
     M.green.emissiveIntensity = 0.04 + 1.5 * p.eyes;
     return p;
   };

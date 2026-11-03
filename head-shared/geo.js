@@ -575,7 +575,9 @@ export function prismDense(m, poly, axis, near, far, bevel = 0.03, {seg = 0.2, m
  * the two skins meet cleanly along folds. Open edges (used by one facet) get a wall t tall. Facets are oriented
  * outward from `centre` (default: the mean vertex). Returns m.
  */
-export function foldedShell(m, facets, t = 0.07, {centre} = {}) {
+export function foldedShell(m, facets, t = 0.07, {centre, lip = t >= 0.05 ? 0.11 : 0} = {}) {
+  // lip: every open edge of the sheet folds back 90° into a return flange this deep (kit armor is a bent shell
+  // with returns round its rim, not a flat card); 0 for thin dark/red inserts
   const all = facets.flat();
   const C = centre || all.reduce((a, v) => a.add(v), new V3()).multiplyScalar(1 / all.length);
   const newell = (P) => {
@@ -648,7 +650,22 @@ export function foldedShell(m, facets, t = 0.07, {centre} = {}) {
       const w = new V3().subVectors(b, a).cross(n);
       const mid = a.clone().add(b).multiplyScalar(0.5);
       if (w.dot(mid.clone().sub(c)) < 0) w.negate();
-      m.quad(a, b, inner.get(key(b)), inner.get(key(a)), w);
+      if (!lip) {
+        m.quad(a, b, inner.get(key(b)), inner.get(key(a)), w);
+        continue;
+      }
+      // the return: a strip of the same thickness bent back along −n from this edge
+      w.normalize();
+      const a2 = a.clone().addScaledVector(n, -lip);
+      const b2 = b.clone().addScaledVector(n, -lip);
+      const ai = a.clone().addScaledVector(w, -t);
+      const bi = b.clone().addScaledVector(w, -t);
+      const ai2 = ai.clone().addScaledVector(n, -lip);
+      const bi2 = bi.clone().addScaledVector(n, -lip);
+      m.quad(a, b, b2, a2, w); // outside of the return
+      m.quad(ai, ai2, bi2, bi, w.clone().negate()); // inside of the return
+      m.quad(a2, b2, bi2, ai2, n.clone().negate()); // its folded-back edge
+      m.quad(a, ai, bi, b, n); // the corner where the face meets the return
     }
   }
   return m;
