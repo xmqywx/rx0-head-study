@@ -314,12 +314,6 @@ export function buildHead() {
       mesh(geoOf((m) => prism(m, [[0.08, 0.17], [0.8, 0.47], [0.88, 0.37], [0.1, 0.06]], 'z', 0.88, (x) => 1.25 - 0.3 * x, 0.02, {mirror: true})), M.red, false),
       mesh(geoOf((m) => prism(m, [[0.19, 0.5], [0.3, 0.58], [0.3, 1.52], [0.19, 1.62]], 'z', 0.95, (x, y) => 1.34 - 0.3 * (y - 0.5), 0.02, {mirror: true})), M.red, false),
     );
-    for (const [x, y] of [[0.42, -0.25], [0.4, -0.55], [0.34, -0.85]])
-      for (const s of [1, -1]) {
-        const k = mesh(geoOf((m) => prism(m, [[x - 0.07, y + 0.05], [x + 0.07, y + 0.05], [x + 0.07, y - 0.05], [x - 0.07, y - 0.05]], 'z', 0.8, (xx, yy) => face(xx, yy) + 0.035, 0.015)), M.red, false);
-        if (s < 0) k.scale.x = -1;
-        g.add(k);
-      }
     const part = add(g, new V3(0, 0, 0.55), (q, obj) => {
       obj.position.z += 0.04 * q.frame;
       obj.visible = q.mask > 0.02; // behind the closed mask it only shows as red slivers in the gaps
@@ -817,12 +811,40 @@ export function buildHead() {
   // ---------------------------------------------------------------- face: Gundam faceplate (Destroy Mode)
   {
     const g = new THREE.Group();
-    const far = (x, y) => 1.08 + 0.12 * y - 0.3 * Math.abs(x);
-    g.add(mesh(geoOf((m) => prism(m, [[-0.33, -0.08], [-0.12, -0.16], [0, -0.13], [0.12, -0.16], [0.33, -0.08], [0.3, -0.62], [0.17, -0.7], [-0.17, -0.7], [-0.3, -0.62]], 'z', 0.82, far, 0.03)), M.white));
-    // mouth vents: three chevrons
+    // Read off the Destroy sheet's side view on a unit grid (reference/grid/d-side-face.png): the faceplate's front
+    // runs z 1.29 at its top (y −.1) down to 1.24 at y −.62 (the vents), then folds back to 1.12 at −.84; its sides
+    // fold back 135° toward the cheeks. The red chin is a wedge jutting forward and down (front corner z 1.33 at
+    // y −1.2, bottom 1.26 at −1.46). All folded sheets / three-view solids, no flat slab.
+    const ROWS = [[-0.1, 0.33, 1.29], [-0.62, 0.28, 1.24], [-0.84, 0.17, 1.12]];
+    const P = (x, y, z) => new V3(x, y, z);
+    const facets = [];
+    for (let i = 0; i < 2; i++) {
+      const [y0, w0, z0] = ROWS[i];
+      const [y1, w1, z1] = ROWS[i + 1];
+      facets.push([P(-w0, y0, z0), P(w0, y0, z0), P(w1, y1, z1), P(-w1, y1, z1)]);
+      for (const sx of [1, -1]) {
+        const A = P(sx * w0, y0, z0);
+        const B = P(sx * w1, y1, z1);
+        const d = P(sx * 0.1, 0, -0.18);
+        facets.push([A, B, B.clone().add(d), A.clone().add(d)]);
+      }
+    }
+    g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
+    const faceZ = (y) => 1.29 + (0.05 / 0.52) * (y + 0.1);
+    // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.3, -0.4, -0.5])
-      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 0.95, (x, yy) => far(x, yy) + 0.008, 0.006, {mirror: true})), M.lens, false));
-    const chin = mesh(geoOf((m) => prism(m, [[-0.15, -0.66], [0.15, -0.66], [0.12, -1.28], [-0.12, -1.28]], 'z', 0.78, (x, y) => 1.02 + 0.08 * y, 0.03)), M.chin, false);
+      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) + 0.008, 0.006, {mirror: true})), M.lens, false));
+    const chin = mesh(
+      geoOf((m) =>
+        viewHull(m, {
+          front: [[-0.15, -0.86], [0.15, -0.86], [0.12, -1.46], [-0.12, -1.46]],
+          side: [[1.12, -0.86], [1.33, -1.2], [1.26, -1.46], [0.9, -1.28], [0.92, -0.9]],
+          top: [[-0.15, 0.9], [0.15, 0.9], [0.15, 1.12], [0.09, 1.33], [-0.09, 1.33], [-0.15, 1.12]],
+        }),
+      ),
+      M.chin,
+      false,
+    );
     // the chin rides up inside the face in Unicorn Mode and drops into place as the faceplate rolls out
     const chinG = new THREE.Group();
     chinG.add(chin);
@@ -901,8 +923,21 @@ export function buildHead() {
       const BR = [[0.45, -0.5], [0.12, -0.5], [0.12, -0.64], [0.28, -0.64], [0.3, -0.98], [0.44, -1.0]];
       foldedShell(m, [BR.map(([z, y]) => new V3(1.0 + 0.1 * (y + 0.5), y, z))], 0.07, {centre: new V3(0.5, -0.7, 0.3)});
     });
+    const tab = geoOf((m) =>
+      viewHull(m, {
+        front: [[0.5, -1.26], [0.74, -1.26], [0.68, -1.72], [0.56, -1.72]],
+        side: [[0.6, -1.3], [0.82, -1.27], [0.92, -1.72], [0.62, -1.56]],
+      }),
+    );
     const g = new THREE.Group();
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white, 40));
+    // the lower tab only appears in NT-D: it slides down out of the cheek guard (Destroy sheet side view)
+    const tabG = new THREE.Group();
+    tabG.add(mesh(s > 0 ? tab : mirrorX(tab), M.white));
+    add(tabG, new V3(s * 0.8, -0.6, 0.4), (p, obj) => {
+      obj.position.y += 0.4 * (1 - p.cheek);
+      obj.visible = p.cheek > 0.02;
+    });
     add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (0.12 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.06 * p.cheek)));
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }

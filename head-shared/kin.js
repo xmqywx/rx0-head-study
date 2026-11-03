@@ -37,7 +37,7 @@ export const MASK = {slide: 0.3, back: 0.06, yaw: 0.42, drop: 0.03}; // halves s
 export const CROWN = {lift: 0.06, rise: 0.04, spread: 0.07}; // spread: the side armor opens outward, the Destroy head is wider
 export const FRAME_RISE = 0.17; // in NT-D the frame rises flush into the seams (plates only lift .06) // the psycho-frame pushes out into the opened seams
 export const FIN = {rise: 0.36};
-export const FACE = {travel: 0.14};
+export const FACE = {travel: 0.42}; // the faceplate rolls forward this far from behind the closed mask
 const COLLAR_Y = -1.72;
 
 export function pose(d) {
