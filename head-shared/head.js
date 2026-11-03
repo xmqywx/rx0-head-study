@@ -324,7 +324,7 @@ export function buildHead() {
       const k = p.crown;
       obj.position.addScaledVector(normal, CROWN.lift * k * c.lift).add(new V3(Math.sign(center.x) * CROWN.spread * k * (c.side ?? 0), CROWN.rise * k * c.up, 0));
       // plates over the side of the jaw slide back and in under the rear plates in NT-D, uncovering the mask half's side wall
-      if (c.tuck) obj.position.add(new V3(-Math.sign(center.x) * 0.12 * p.cheek, 0, -0.75 * p.cheek));
+      if (c.tuck) obj.position.add(new V3(Math.sign(center.x) * 0.03 * p.cheek, 0, -0.22 * p.cheek)); // just clears the shorter side wall; no hole behind it
     });
     plateParts.push({part, center, c, ...extra});
     return part;
@@ -745,6 +745,7 @@ export function buildHead() {
     // face part sheet: a large upper panel under the visor down to the fold (y −.9), the lower V's front facet to
     // the chin, and its side facet turning back toward the cheek; each a uniform sheet at its own height
     const U = (pts, lift) => pts.map(([x, y]) => new V3(x, y, mask(x, y) + lift));
+    let wallX = null;
     const shell = mk((m) => {
       // re-read against the sheet on one grid (refmatch/out/face-grid.png): the upper panel's outer edge runs from
       // under the visor at x .6 down and in to .47 at y −.6, then the diagonal to the fold at (.19, −1.0); outside
@@ -758,8 +759,14 @@ export function buildHead() {
       // then 45° forward-down to (.44, −.85) and on to (.6, −1.2)); no right angles anywhere on its outline
       const YS = [0.1, -0.29, -0.85, -1.2];
       const ox = (y) => (y > -0.45 ? 0.72 + (0.1 / 0.55) * (y - 0.1) : 0.62 + (0.12 / 0.55) * (y + 0.45)); // the outer edge
-      const W = YS.map((y) => new V3(ox(y) + 0.02, y, mask(Math.min(ox(y), 0.74), y) + 0.03));
-      const Wb = [0.0, -0.06, 0.44, 0.6].map((z, i) => new V3(W[i].x - 0.02, YS[i], z));
+      // the side wall leaves the front facet at ~142° (top view: back 1, out .5) so it wraps the face, and stops at
+      // the red frame's Z (back edge depths from the Destroy side view, shortened to stay on the head)
+      const zf = (y) => mask(Math.min(ox(y), 0.74), y) + 0.03;
+      const xw = (y, z) => ox(y) + 0.02 + 0.5 * (zf(y) - z);
+      const W = YS.map((y) => new V3(ox(y) + 0.02, y, zf(y)));
+      const ZB = [0.62, 0.55, 0.78, 0.88];
+      const Wb = ZB.map((z, i) => new V3(xw(YS[i], z), YS[i], z));
+      wallX = xw;
       foldedShell(m, [0, 1, 2].map((i) => [W[i], W[i + 1], Wb[i + 1], Wb[i]]), T_FACE, {centre: new V3(0.2, -0.45, 0.6)});
     });
     // the jaw behind the layers: shaded metal where face.png shows the dark recess between strip and cheek, and a
@@ -797,6 +804,7 @@ export function buildHead() {
     let maskRed = null;
     let maskFront = null;
     let maskRedX = 0;
+    let maskL2 = null;
     // the frame sheet that rides under this half: same outline, a little larger, just behind it, so the opened
     // half shows a red rim along its edges (Destroy sheet, "opened mask halves")
     {
@@ -805,9 +813,10 @@ export function buildHead() {
       // standing just outside the half's edge and behind it, so it shows as a glowing seam between mask and cheek.
       // S-04 (Codex side-face sheet): a thin red plate along the side wall's back edge: a short upright prong above
       // the eye line, down the edge, then stepping forward to the chin line; it lies in the wall's plane, just behind it
-      const E = [[0.1, 0.0], [-0.29, -0.06], [-0.85, 0.44], [-1.2, 0.6]]; // (y, z) along the wall's back edge: the sheet's Z
+      const E = [[0.1, 0.62], [-0.29, 0.55], [-0.85, 0.78], [-1.2, 0.88]]; // (y, z) along the wall's back edge: the sheet's Z
       const wx = (y) => (y > -0.45 ? 0.72 + (0.1 / 0.55) * (y - 0.1) : 0.62 + (0.12 / 0.55) * (y + 0.45)) + 0.0;
-      const at = ([y, z], dz) => new V3(sx(wx(y)) + s * 0.012, y, z - dz); // dz: across the strip, toward the back
+      void wx;
+      const at = ([y, z], dz) => new V3(sx(wallX(y, z - dz) - 0.075), y, z - dz); // under the wall's inner skin
       const sx = (x) => s * x;
       const strip = (w0, w1, mat) => {
         const m2 = new Mesher();
@@ -816,17 +825,32 @@ export function buildHead() {
           const b = E[k + 1];
           const A0 = at(a, w0), A1 = at(a, w1), B0 = at(b, w0), B1 = at(b, w1);
           m2.quad(A0, B0, B1, A1, new V3(s, 0, 0));
-          const back = (v) => v.clone().add(new V3(-s * 0.04, 0, 0));
+          const back = (v) => v.clone().add(new V3(-s * 0.025, 0, 0));
           m2.quad(back(A0), back(A1), back(B1), back(B0), new V3(-s, 0, 0));
           m2.quad(A1, B1, back(B1), back(A1), new V3(0, 0, -1));
           m2.quad(A0, back(A0), back(B0), B0, new V3(0, 0, 1));
         }
         return mesh(m2.geo(), mat, false);
       };
+      {
+        // cheek plate: on the wall's outer face (one armor thickness out), covering its front part, tapering
+        // to the jaw; folded once along its length so it follows the wall's bend
+        const on = (y, z, o) => new V3(wallX(y, z) + o, y, z);
+        const CP = [[0.16, 1.12, 0.86], [-0.3, 1.1, 0.82], [-0.8, 1.02, 0.86], [-1.12, 0.9, 0.9]];
+        const fac = [];
+        for (let i = 0; i < CP.length - 1; i++) {
+          const [y0, a0, b0] = CP[i];
+          const [y1, a1, b1] = CP[i + 1];
+          fac.push([on(y0, a0, 0.075), on(y0, b0, 0.075), on(y1, b1, 0.075)], [on(y0, a0, 0.075), on(y1, b1, 0.075), on(y1, a1, 0.075)]);
+        }
+        const cg = geoOf((m) => foldedShell(m, fac, 0.05, {centre: new V3(0.4, -0.45, 0.5), lip: 0}));
+        maskL2 = mesh(s > 0 ? cg : mirrorX(cg), M.white, 40);
+        pv.children[0].add(maskL2);
+      }
       maskRed = new THREE.Group();
       // an inner red shell: a band lying just inside the wall's plane, from under the wall to past its back edge
-      maskRed.add(strip(-0.12, 0.16, M.red));
-      maskRedX = -s * 0.03;
+      maskRed.add(strip(-0.1, 0.1, M.red));
+      maskRedX = 0;
       // and the L in the fold between the half's inner panel and outer facet, seen from the front
       {
         const F = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]]; // the fold between the inner panel and the outer facet: the sheet's L, left visible beside layer 2
@@ -880,6 +904,10 @@ export function buildHead() {
       obj.rotation.z = -s * MASK.roll * k; // the lower ends swing in to clamp the chin (front sheet)
       if (maskRed) maskRed.position.x = maskRedX - s * 0.25 * (1 - k); // the inner shell slides in until the half opens
       if (maskFront) maskFront.position.z = -0.3 * (1 - k);
+      if (maskL2) {
+        maskL2.visible = k > 0.02;
+        maskL2.position.x = -s * 0.2 * (1 - k); // slides out of the wall as the half opens
+      }
     });
     if (s > 0) anchors.mask = {obj: pv, p: new V3(0.45, -0.55, 1.15)};
   }
@@ -1074,7 +1102,8 @@ export function buildHead() {
       const L2 = band([[0.2, 0.9, 1.08], [-0.3, 0.92, 1.1], [-0.75, 0.8, 1.0], [-1.05, 0.62, 0.78]], 0.02);
       const L3 = band([[0.28, 1.06, 1.26], [-0.3, 1.08, 1.28], [-0.82, 0.98, 1.16], [-1.12, 0.76, 0.9]], 0.05);
       void L3;
-      for (const [F, k] of [[L2, 0]]) {
+      void L2;
+      for (const [F, k] of []) {
         const geoL = geoOf((m) => foldedShell(m, F, 0.05, {centre: new V3(0.4, -0.4, 0.2)}));
         const lg = new THREE.Group();
         lg.add(mesh(s > 0 ? geoL : mirrorX(geoL), M.white, 40));
