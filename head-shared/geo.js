@@ -575,7 +575,7 @@ export function prismDense(m, poly, axis, near, far, bevel = 0.03, {seg = 0.2, m
  * the two skins meet cleanly along folds. Open edges (used by one facet) get a wall t tall. Facets are oriented
  * outward from `centre` (default: the mean vertex). Returns m.
  */
-export function foldedShell(m, facets, t = 0.07, {centre, lip = t >= 0.05 ? 0.11 : 0} = {}) {
+export function foldedShell(m, facets, t = 0.07, {centre, lip = t >= 0.05 ? 0.06 : 0} = {}) {
   // lip: every open edge of the sheet folds back 90° into a return flange this deep (kit armor is a bent shell
   // with returns round its rim, not a flat card); 0 for thin dark/red inserts
   const all = facets.flat();

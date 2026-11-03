@@ -780,7 +780,7 @@ export function buildHead() {
       // (x .74, y .1) to (.6, −.65), then diagonally in to the chin (.3, −1.4). A flat red strip with a hot core,
       // standing just outside the half's edge and behind it, so it shows as a glowing seam between mask and cheek.
       const E = [[0.6, 0.05], [0.48, -0.62], [0.2, -1.02]]; // the fold between the half's inner panel and outer facet
-      const at = ([x, y], dx) => new V3(sx(x) + dx * s, y, FACE_SURF(Math.min(x, 0.74), y) + 0.035);
+      const at = ([x, y], dx) => new V3(sx(x) + dx * s, y, FACE_SURF(Math.min(x, 0.74), y) + 0.11); // proud of both facets so the whole L shows
       const sx = (x) => s * x;
       const strip = (w0, w1, mat) => {
         const m2 = new Mesher();
@@ -865,8 +865,8 @@ export function buildHead() {
       geoOf((m) =>
         viewHull(m, {
           // hexagonal block hanging from the faceplate's point (sheet: ±.18, y −.70 … −1.25)
-          front: [[-0.18, -0.7], [0.18, -0.7], [0.18, -1.08], [0.1, -1.25], [-0.1, -1.25], [-0.18, -1.08]],
-          side: [[0.95, -0.7], [1.22, -0.7], [1.3, -0.95], [1.24, -1.25], [0.95, -1.25]],
+          front: [[-0.17, -0.7], [0.17, -0.7], [0.17, -0.96], [0.1, -1.1], [-0.1, -1.1], [-0.17, -0.96]],
+          side: [[0.95, -0.7], [1.22, -0.7], [1.3, -0.9], [1.24, -1.1], [0.95, -1.1]],
           top: [[-0.18, 0.95], [0.18, 0.95], [0.18, 1.2], [0.1, 1.3], [-0.1, 1.3], [-0.18, 1.2]],
         }),
       ),
