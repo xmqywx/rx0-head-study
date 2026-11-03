@@ -422,19 +422,18 @@ export function buildHead() {
   const P3 = (x, y, z) => new V3(x, y, z);
   const MX = (fs) => [...fs, ...fs.map((f) => f.map((v) => new V3(-v.x, v.y, v.z)))];
   {
-    const col = geoOf((m) =>
-      foldedShell(m, [
-        [P3(-0.26, 1.3, 1.02), P3(0.26, 1.3, 1.02), P3(0.26, 1.75, 1.02), P3(-0.26, 1.75, 1.02)],
-        [P3(0.26, 1.3, 1.02), P3(0.26, 1.3, 0.5), P3(0.26, 1.75, 0.5), P3(0.26, 1.75, 1.02)],
-        [P3(-0.26, 1.3, 1.02), P3(-0.26, 1.3, 0.5), P3(-0.26, 1.75, 0.5), P3(-0.26, 1.75, 1.02)],
-        [P3(-0.26, 1.3, 0.5), P3(0.26, 1.3, 0.5), P3(0.26, 1.75, 0.5), P3(-0.26, 1.75, 0.5)],
-        [P3(-0.26, 1.75, 1.02), P3(0.26, 1.75, 1.02), P3(0.26, 1.75, 0.5), P3(-0.26, 1.75, 0.5)],
-      ], T, {centre: new V3(0, 1.45, 0.76)}),
-    );
+    // the column under the horn: a folded sheet with a narrow front, 45° chamfers and sides, tapering and leaning
+    // back toward the horn (front z 1.06 at y 1.3 → .94 at 1.75; half width .26 → .206); closed at the back and top
+    const colHalf = [
+      [P3(0, 1.3, 1.06), P3(0.16, 1.3, 1.06), P3(0.12, 1.75, 0.94), P3(0, 1.75, 0.94)],
+      [P3(0.16, 1.3, 1.06), P3(0.26, 1.3, 0.92), P3(0.206, 1.75, 0.82), P3(0.12, 1.75, 0.94)],
+      [P3(0.26, 1.3, 0.92), P3(0.26, 1.3, 0.5), P3(0.206, 1.75, 0.5), P3(0.206, 1.75, 0.82)],
+    ];
+    const colTop = [P3(-0.12, 1.75, 0.94), P3(0.12, 1.75, 0.94), P3(0.206, 1.75, 0.82), P3(0.206, 1.75, 0.5), P3(-0.206, 1.75, 0.5), P3(-0.206, 1.75, 0.82)];
+    const colBack = [P3(-0.26, 1.3, 0.5), P3(0.26, 1.3, 0.5), P3(0.206, 1.75, 0.5), P3(-0.206, 1.75, 0.5)];
+    const col = geoOf((m) => foldedShell(m, [...MX(colHalf), colTop, colBack], T, {centre: new V3(0, 1.5, 0.76)}));
     browGroup.add(mesh(col, M.white));
     // grooves on the column sides and the small raised tab at its front top (side view)
-    browGroup.add(mesh(geoOf((m) => prism(m, [[0.62, 1.36], [0.7, 1.36], [0.7, 1.66], [0.62, 1.66]], 'x', 0.2, 0.267, 0.004, {mirror: true})), M.lens, false));
-    browGroup.add(mesh(geoOf((m) => foldedShell(m, [[P3(-0.1, 1.42, 1.03), P3(0.1, 1.42, 1.03), P3(0.1, 1.62, 1.1), P3(-0.1, 1.62, 1.1)]], 0.04, {centre: new V3(0, 1.5, 0.5)})), M.white));
     // upper plate: ridge (0, y, zr) with halves to x .36 turning back; zr 1.08 at the column, 1.2 at the ledge
     const upper = MX([
       [P3(0, 1.3, 1.04), P3(0, 1.12, 1.12), P3(0.36, 1.12, 0.92), P3(0.3, 1.3, 0.86)],
@@ -458,15 +457,15 @@ export function buildHead() {
     browGroup.add(cam);
     anchors.camera = {obj: cam, p: new V3(0, 0.78, 1.14)};
     // lower plate: from under the window (y .62, ridge z 1.5) to the prow tip, chevron, beak point
+    // lower plate (per half, mirrored): its top edge sits just proud of the recess floor's lower edge (y .5), the
+    // upper facet slopes forward and down to the prow tip (y .4, z 1.62), then the beak folds down to its point at the
+    // visor (y .03, z 1.42); triangles where three folds meet, so every facet is planar
     const lower = MX([
-      [P3(0, 0.5, 1.6), P3(0, 0.47, 1.66), P3(0.33, 0.55, 1.36), P3(0.36, 0.5, 1.34)], // half, above the prow line
-      [P3(0, 0.47, 1.66), P3(0, 0.34, 1.6), P3(0.3, 0.42, 1.32), P3(0.33, 0.55, 1.36)], // half, down to the chevron
-      [P3(0, 0.34, 1.6), P3(0, 0.03, 1.42), P3(0.3, 0.42, 1.32)], // beak face
-      [P3(0, 0.03, 1.42), P3(0.34, 0.1, 1.24), P3(0.3, 0.42, 1.32)], // beak's outer face
+      [P3(0, 0.5, 1.32), P3(0, 0.4, 1.62), P3(0.33, 0.46, 1.38), P3(0.3, 0.5, 1.26)],
+      [P3(0, 0.4, 1.62), P3(0, 0.03, 1.42), P3(0.33, 0.46, 1.38)],
+      [P3(0, 0.03, 1.42), P3(0.34, 0.1, 1.24), P3(0.33, 0.46, 1.38)],
     ]);
-    // the lip under the window: the lower plate's top edge turns up to meet the window floor
-    const lip = MX([[P3(0, 0.5, 1.6), P3(0.36, 0.5, 1.34), P3(0.25, 0.5, 1.2), P3(0, 0.5, 1.26)]]);
-    browGroup.add(mesh(geoOf((m) => foldedShell(m, [...lower, ...lip], T, {centre: new V3(0, 0.4, 0.6)})), M.white));
+    browGroup.add(mesh(geoOf((m) => foldedShell(m, lower, T, {centre: new V3(0, 0.3, 0.6)})), M.white));
     // wings: each a sheet with a diagonal fold (from the inner top (.36,1.3) down to the outer bottom (.95,.33))
     // and an outer fold into the side face; corner depths from the side view
     const wing = [
