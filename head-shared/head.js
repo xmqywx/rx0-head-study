@@ -152,78 +152,126 @@ export function buildHead() {
   // the inner skin the frame plates retract behind (hidden when the armor is ghosted or exploded, to show the machine)
   const innerSkin = mesh(loftBody(core, [-1.2, -0.85, -0.55, -0.1, 0.3, 0.65, 0.95, 1.2, 1.4, 1.58, 1.72, 1.84], 24), M.frame, false);
   root.add(innerSkin);
+  // The interior, built the way a teardown reads (a dozen standard parts, repeated): a central stack of turned levels
+  // — washers, gear discs, bearing races, torus seals — following the head's profile, each ringed by instanced
+  // satellites (capsules, hex bolts, ball joints, radial pistons), tied by vertical tie rods. In the explode the levels
+  // fan apart along the stack and their satellites spread outward.
+  let curExplode = 0;
+  const interiorLevels = [];
   {
-    const hash = (i, j) => {
-      const x = Math.sin(i * 127.1 + j * 311.7) * 43758.5453;
-      return x - Math.floor(x);
+    const UPV = new V3(0, 1, 0);
+    const lathe = (pts) => {
+      const g = new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), 36);
+      g.deleteAttribute('uv');
+      return g;
     };
+    const LEVEL = {
+      washer: (R) => lathe([[R * 0.45, -0.03], [R, -0.03], [R, 0.0], [R * 0.93, 0.0], [R * 0.93, 0.01], [R, 0.01], [R, 0.03], [R * 0.45, 0.03], [R * 0.45, -0.03]]),
+      bearing: (R) => lathe([[R * 0.3, -0.05], [R * 0.82, -0.05], [R * 0.82, -0.02], [R, -0.02], [R, 0.02], [R * 0.82, 0.02], [R * 0.82, 0.05], [R * 0.3, 0.05], [R * 0.3, -0.05]]),
+      seal: (R) => {
+        const g = new THREE.TorusGeometry(R * 0.86, 0.035, 8, 40);
+        g.rotateX(Math.PI / 2);
+        g.deleteAttribute('uv');
+        return g;
+      },
+      gear: (R) => {
+        const g = gear(R, Math.max(14, Math.round(R * 40)), 0.06);
+        g.rotateX(Math.PI / 2);
+        return g;
+      },
+    };
+    const TYPES = ['washer', 'gear', 'bearing', 'seal', 'washer', 'bearing', 'gear', 'seal'];
+    const MATS = {washer: M.frameMid, gear: M.steel, bearing: M.frame, seal: M.frame};
+    // satellite parts (unit size, instanced)
+    const SAT = {
+      capsule: (() => {
+        const g = new THREE.CapsuleGeometry(0.03, 0.08, 4, 8);
+        g.rotateZ(Math.PI / 2);
+        return g;
+      })(),
+      bolt: (() => {
+        const g = new THREE.CylinderGeometry(0.035, 0.035, 0.05, 6);
+        return g;
+      })(),
+      ball: new THREE.IcosahedronGeometry(0.035, 1),
+      spoke: (() => {
+        const g = new THREE.CylinderGeometry(0.018, 0.018, 1, 8);
+        g.rotateZ(Math.PI / 2);
+        g.translate(0.5, 0, 0);
+        return g;
+      })(),
+    };
+    const SATMAT = {capsule: M.steel, bolt: M.frame, ball: M.steel, spoke: M.frameMid};
+    const ys = [];
+    for (let y = -1.12; y <= 1.72; y += 0.155) ys.push(y);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const sc = new V3();
+    ys.forEach((y, i) => {
+      const [hw, zf, zb] = core.at(y);
+      const zc = (zf + zb) / 2 - 0.05;
+      const rMax = Math.min(hw, (zf - zb) / 2) * 0.88;
+      const R = rMax * (i % 3 === 1 ? 0.62 : i % 3 === 2 ? 0.78 : 0.7);
+      const type = TYPES[i % TYPES.length];
+      const lev = new THREE.Group();
+      const ring = mesh(LEVEL[type](R), MATS[type], false);
+      ring.position.set(0, y, zc);
+      if (type === 'gear') ring.position.y -= 0.03;
+      lev.add(ring);
+      // satellites round the ring
+      const kind = ['capsule', 'bolt', 'ball', 'bolt'][i % 4];
+      const n = Math.max(8, Math.round(R * 22));
+      const sats = new THREE.InstancedMesh(SAT[kind], SATMAT[kind], n);
+      sats.castShadow = sats.receiveShadow = true;
+      const satR = R + 0.05;
+      const pose = (spread) => {
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2 + i * 0.3;
+          const r = satR + spread;
+          q.setFromAxisAngle(UPV, -a);
+          m4.compose(new V3(Math.cos(a) * r, y + 0.0, zc + Math.sin(a) * r), q, sc.set(1, 1, 1));
+          sats.setMatrixAt(k, m4);
+        }
+        sats.instanceMatrix.needsUpdate = true;
+      };
+      pose(0);
+      lev.add(sats);
+      // radial pistons on every third level, out toward the skin
+      let spokes = null;
+      if (i % 3 === 0) {
+        const ns = 6;
+        spokes = new THREE.InstancedMesh(SAT.spoke, SATMAT.spoke, ns);
+        spokes.castShadow = true;
+        for (let k = 0; k < ns; k++) {
+          const a = (k / ns) * Math.PI * 2 + 0.26;
+          q.setFromAxisAngle(UPV, -a);
+          m4.compose(new V3(Math.cos(a) * R, y, zc + Math.sin(a) * R), q, sc.set(Math.max(0.05, rMax * 1.08 - R), 1, 1));
+          spokes.setMatrixAt(k, m4);
+        }
+        lev.add(spokes);
+      }
+      const yMid = 0.3;
+      const part = add(lev, new V3(0, (y - yMid) * 1.1, 0), () => pose(0.45 * curExplode));
+      part.radial = false;
+      interiorLevels.push(part);
+    });
+    // the central core and six tie rods through the stack
+    const core0 = mesh(lathe([[0.001, -1.2], [0.12, -1.2], [0.12, 1.78], [0.001, 1.78]]), M.frame, false);
+    core0.position.z = -0.1;
+    skull.add(core0);
+    const rods = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.02, 0.02, 2.9, 8), M.steel, 6);
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      m4.compose(new V3(Math.cos(a) * 0.3, 0.3, -0.1 + Math.sin(a) * 0.3), q.identity(), sc.set(1, 1, 1));
+      rods.setMatrixAt(k, m4);
+    }
+    skull.add(rods);
+  }
+  {
     const dark = [];
     const mid = [];
     const steel = [];
     const UP = new V3(0, 1, 0);
-    const B = (w, h, d, x, y, z) => {
-      const g = new THREE.BoxGeometry(w, h, d).toNonIndexed();
-      g.deleteAttribute('uv');
-      g.translate(x, y, z);
-      return g;
-    };
-    // the spine
-    dark.push(B(0.42, 3.0, 0.5, 0, 0.35, -0.2));
-    const DY = [-1.12, -0.62, -0.12, 0.38, 0.88, 1.36, 1.72];
-    const prof = (y) => {
-      const [hw, zf, zb] = core.at(y);
-      return {hw: hw * 0.9, zf: zf * 0.9, zb: zb * 0.9, zc: (zf + zb) / 2};
-    };
-    // decks: chamfered octagons at each level
-    for (const y of DY) {
-      const {hw, zf, zb} = prof(y);
-      const c = Math.min(hw, (zf - zb) / 2) * 0.35;
-      const oct = [[-hw + c, zb], [hw - c, zb], [hw, zb + c], [hw, zf - c], [hw - c, zf], [-hw + c, zf], [-hw, zf - c], [-hw, zb + c]];
-      mid.push(geoOf((m) => prism(m, oct, 'y', y - 0.04, y + 0.04, 0.015)));
-    }
-    // between the decks: structural posts tying each deck to the next, and in every bay a joint assembly from the
-    // exploded view — a two-link arm on clevises, a bearing joint on a bracket, paired actuators with clevis ends,
-    // or a gear pair on a bearing — each aimed outward, so the interior reads as linked machinery
-    for (let i = 0; i < DY.length - 1; i++) {
-      const y0 = DY[i] + 0.04;
-      const y1 = DY[i + 1] - 0.04;
-      const ym = (y0 + y1) / 2;
-      const hgt = y1 - y0;
-      const {hw, zf, zb, zc} = prof(ym);
-      const rz = (zf - zb) / 2;
-      const N = hw > 0.5 ? 10 : 6;
-      for (let k = 0; k < N; k++) {
-        const a = ((k + 0.5 * (i % 2)) / N) * Math.PI * 2;
-        const dx = Math.sin(a);
-        const dz = Math.cos(a);
-        const n = new V3(dx / hw, 0, dz / rz).normalize();
-        const t = new V3(-n.z, 0, n.x);
-        const p = new V3(dx * hw * 0.8, ym, zc + dz * rz * 0.8);
-        // a post at every other bay boundary
-        if (k % 2 === 0) {
-          const q = new V3(Math.sin(a - Math.PI / N) * hw * 0.86, ym, zc + Math.cos(a - Math.PI / N) * rz * 0.86);
-          dark.push(place(rib(hgt), q, n, UP));
-        }
-        const h = hash(i * 5.3, k * 2.9);
-        if (h < 0.3) {
-          dark.push(place(clevis(0.14, 0.08), p.clone().addScaledVector(UP, -hgt * 0.42), UP, n));
-          steel.push(place(linkArm(hgt * 0.45, hgt * 0.38, 0.8 + h), p.clone().addScaledVector(UP, -hgt * 0.3).addScaledVector(n, 0.06), n, UP, (h - 0.15) * 2));
-        } else if (h < 0.55) {
-          mid.push(place(bracket(0.2, hgt * 0.7), p, n, UP));
-          steel.push(place(bearing(Math.min(0.1, hgt * 0.28)), p.clone().addScaledVector(n, 0.06), n, UP));
-          steel.push(place(linkPlate(hgt * 0.4, 0.06), p.clone().addScaledVector(n, 0.12), n, t, 0.6));
-        } else if (h < 0.78) {
-          for (const o of [-0.07, 0.07]) {
-            steel.push(place(piston(hgt * 0.8, 0.028), p.clone().addScaledVector(t, o), n, UP));
-            dark.push(place(clevis(0.09, 0.05, 0.035), p.clone().addScaledVector(t, o).addScaledVector(UP, -hgt * 0.45), UP, n));
-          }
-        } else {
-          mid.push(place(socket(0.16), p.clone().addScaledVector(UP, -hgt * 0.35), UP, n));
-          steel.push(place(gear(Math.min(hgt * 0.3, 0.12), 16, 0.04), p.clone().addScaledVector(n, 0.08), n, UP, h * 9));
-          steel.push(place(bearing(0.05, 0.05), p.clone().addScaledVector(n, 0.1).addScaledVector(t, 0.14), n, UP));
-        }
-      }
-    }
     // the mounting joints, where armor hangs on the frame: mask hinges, horn-root socket, cheek and pod pivots
     for (const sx of [1, -1]) {
       const pr = (x, y, z) => new V3(sx * x, y, z);
@@ -1384,16 +1432,51 @@ export function buildHead() {
   };
 
   const tmp = new V3();
+  const TMP_Q = new THREE.Quaternion();
+  let guides = null;
+  let guideLines = null;
+  const guideCircles = [];
+  const radialParts = [];
+  const guideMat = new THREE.LineDashedMaterial({color: '#3a4048', dashSize: 0.05, gapSize: 0.04, transparent: true, opacity: 0});
+  const guideMat2 = new THREE.LineBasicMaterial({color: '#7a828a', transparent: true, opacity: 0});
   let underSheet = null;
   const RED_OFF = new THREE.Color('#2b2e33'); // the frame under the shell reads as a dark seam until NT-D
   const RED_ON = new THREE.Color('#d41a10');
   const update = ({d = 0, explode = 0, armor = 1, time = 0, ink = true}) => {
     const p = pose(d);
+    curExplode = explode;
     for (const part of parts) {
       part.obj.position.copy(part.home);
       part.obj.quaternion.copy(part.homeQ);
       part.fn?.(p, part.obj);
-      if (explode > 0) part.obj.position.addScaledVector(part.ex, explode);
+      if (explode > 0) {
+        if (part.radial === false || !part.restC) part.obj.position.addScaledVector(part.ex, explode);
+        else {
+          // fan out along the ray from the head's centre, farther for parts already far out, with a slight tumble
+          part.obj.position.addScaledVector(part.dir, part.reach * explode);
+          part.obj.quaternion.premultiply(TMP_Q.setFromAxisAngle(part.spinAxis, 0.35 * explode));
+        }
+      }
+    }
+    // the explode's guides: dashed leaders from each part's seat to where it floats, and three orbit circles
+    if (guides) {
+      const on = explode > 0.02;
+      guides.visible = on;
+      if (on) {
+        const pa = guideLines.geometry.attributes.position.array;
+        let k = 0;
+        for (const part of radialParts) {
+          const a = part.restC;
+          const b = part.restC.clone().addScaledVector(part.dir, part.reach * explode);
+          pa.set([a.x, a.y, a.z, b.x, b.y, b.z], k);
+          k += 6;
+        }
+        guideLines.geometry.attributes.position.needsUpdate = true;
+        guideLines.computeLineDistances();
+        for (const c of guideCircles) c.scale.setScalar(0.6 + 0.4 * explode);
+        guideMat.opacity = 0.55 * explode;
+        guideMat2.opacity = 0.35 * explode;
+      }
     }
     setArmor(armor);
     for (const l of inkLines) l.visible = ink;
@@ -1454,6 +1537,47 @@ export function buildHead() {
     root.add(under);
     underSheet = under;
     anchors.frame = {obj: under, p: surf.S(66 * D2R, 1.6)};
+  }
+  // radial explode data: each part's seat (centre at rest), its ray from the head's centre and how far it travels
+  {
+    update({d: 0, explode: 0});
+    root.updateMatrixWorld(true);
+    const C = new V3(0, 0.35, -0.15);
+    const box = new THREE.Box3();
+    let seed = 11;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (const part of parts) {
+      if (part.radial === false) continue;
+      box.setFromObject(part.obj);
+      if (box.isEmpty()) continue;
+      const c = box.getCenter(new V3());
+      root.worldToLocal(c);
+      const v = c.clone().sub(C);
+      const len = v.length();
+      part.restC = c;
+      part.dir = len > 1e-3 ? v.multiplyScalar(1 / len) : new V3(0, 1, 0);
+      part.reach = 0.7 + 0.75 * len;
+      part.spinAxis = new V3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+      radialParts.push(part);
+    }
+    guides = new THREE.Group();
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(radialParts.length * 6), 3));
+    guideLines = new THREE.LineSegments(lg, guideMat);
+    guideLines.frustumCulled = false;
+    guides.add(guideLines);
+    for (const [r, rx, ry] of [[2.6, Math.PI / 2, 0], [3.4, 0, 0], [4.2, Math.PI / 2.4, 0.5]]) {
+      const pts = Array.from({length: 128}, (_, i) => new V3(Math.cos((i / 128) * Math.PI * 2) * r, Math.sin((i / 128) * Math.PI * 2) * r, 0));
+      const loop = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), guideMat2);
+      loop.rotation.set(rx, ry, 0);
+      const holder = new THREE.Group();
+      holder.position.copy(C);
+      holder.add(loop);
+      guides.add(holder);
+      guideCircles.push(holder);
+    }
+    guides.visible = false;
+    root.add(guides);
   }
   // marking decals (decals.js), laid in the Unicorn pose on the outer armor and carried by their parts
   {
