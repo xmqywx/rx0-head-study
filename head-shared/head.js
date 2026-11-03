@@ -68,9 +68,10 @@ const CORE = [
 const PLATES = [
   {k: 'crownR', side: 1.0, ub: [58, 166], ut: [76, 166], yb: [1.5, 1.42], yt: [1.98, 1.98], lift: 1, up: 1, red: 'b', off: 0.05, t: 0.1},
   {k: 'rearUp', side: 0.9, ub: [118, 166], ut: [118, 166], y: [0.45, 1.42], lift: 0.8, up: 0.4, red: 'lbr', off: 0.025, t: 0.11},
-  {k: 'sideMid', side: 1, ub: [62, 118], ut: [56, 118], y: [-0.5, 0.78], lift: 0.35, up: 0, red: ''},
+  {k: 'sideMidHi', side: 1, ub: [59, 118], ut: [56, 118], y: [0.12, 0.78], lift: 0.35, up: 0, red: ''},
+  {k: 'sideMid', tuck: 1, side: 1, ub: [62, 118], ut: [59, 118], y: [-0.5, 0.12], lift: 0.35, up: 0, red: ''}, // the jaw side: tucks back in NT-D
   {k: 'rearLow', side: 2.4, ub: [118, 166], ut: [118, 166], yb: [-0.86, -0.9], yt: [0.45, 0.45], lift: 0.6, up: 0, red: 'lr', off: -0.01},
-  {k: 'sideLow', side: 1, ub: [68, 118], ut: [62, 118], yb: [-1.05, -0.86], yt: [-0.5, -0.5], lift: 0.3, up: 0, red: ''},
+  {k: 'sideLow', tuck: 1, side: 1, ub: [68, 118], ut: [62, 118], yb: [-1.05, -0.86], yt: [-0.5, -0.5], lift: 0.3, up: 0, red: ''},
 ];
 function materials() {
   const std = (o) => new THREE.MeshStandardMaterial({roughness: 0.5, metalness: 0, envMapIntensity: 0.6, ...o});
@@ -314,7 +315,7 @@ export function buildHead() {
     const mirror = side < 0;
     const {geo, center, normal} = shellPlate(surf, c, {t: T_ARMOR, off: Math.min(c.off ?? 0, 0.02) - 0.02, gap: 0.028, bevel: 0.02, mirror});
     // its frame plate: the same outline, thin, lying just under it
-    redPlates.push(shellPlate(surf, c, {t: T_RED, off: Math.min(c.off ?? 0, 0.02) - 0.02 - T_RED - 0.008, gap: 0.0, bevel: 0.006, mirror}).geo);
+    if (!c.tuck) redPlates.push(shellPlate(surf, c, {t: T_RED, off: Math.min(c.off ?? 0, 0.02) - 0.02 - T_RED - 0.008, gap: 0.0, bevel: 0.006, mirror}).geo);
     const o = mesh(geo, M.white);
     const g = new THREE.Group();
     g.add(o);
@@ -322,6 +323,8 @@ export function buildHead() {
     const part = add(g, ex, (p, obj) => {
       const k = p.crown;
       obj.position.addScaledVector(normal, CROWN.lift * k * c.lift).add(new V3(Math.sign(center.x) * CROWN.spread * k * (c.side ?? 0), CROWN.rise * k * c.up, 0));
+      // plates over the side of the jaw slide back and in under the rear plates in NT-D, uncovering the mask half's side wall
+      if (c.tuck) obj.position.add(new V3(-Math.sign(center.x) * 0.12 * p.cheek, 0, -0.75 * p.cheek));
     });
     plateParts.push({part, center, c, ...extra});
     return part;
@@ -747,12 +750,16 @@ export function buildHead() {
       // it a long side facet from the visor's end (x .72) down to a point beside the chin (.28, −1.42)
       foldedShell(m, [U([[0.006, -0.16], [0.6, 0.05], [0.47, -0.6], [0.19, -1.0], [0.006, -1.0]], 0.03)], T_FACE, {centre: new V3(0.3, -0.4, 0)});
       foldedShell(m, [U([[0.006, -1.02], [0.18, -1.02], [0.13, -1.22], [0.006, -1.22]], 0.03)], T_FACE, {centre: new V3(0.1, -1.0, 0)});
-      foldedShell(m, [U([[0.61, 0.05], [0.72, 0.1], [0.57, -0.65], [0.28, -1.42], [0.14, -1.24], [0.2, -1.02], [0.48, -0.62]], 0.0)], T_FACE, {centre: new V3(0.35, -0.6, 0)});
+      foldedShell(m, [U([[0.61, 0.05], [0.72, 0.1], [0.57, -0.65], [0.28, -1.42], [0.14, -1.24], [0.2, -1.02], [0.48, -0.62]], 0.06)], T_FACE, {centre: new V3(0.35, -0.6, 0)});
       // S-03 side wall: from the facet's outer edge (x .72 → .5) straight back to the red frame line (sheet: the
       // wall's back edge runs z .62 at the top, .68 at y −.34, .9 at y −1.0, in the half's closed position)
-      const W = [[0.72, 0.1], [0.62, -0.45], [0.5, -1.0]].map(([x, y]) => new V3(x + 0.02, y, mask(Math.min(x, 0.74), y)));
-      const Wb = [[0.1, 0.62], [-0.34, 0.68], [-1.0, 0.9]].map(([y, z], i) => new V3(W[i].x - 0.03, y, z));
-      foldedShell(m, [[W[0], W[1], Wb[1], Wb[0]], [W[1], W[2], Wb[2], Wb[1]]], T_FACE, {centre: new V3(0.3, -0.45, 0.8)});
+      // the wall reaches back to mid-head (Destroy side view: its back edge — the red Z — runs z 0 from y .1 to −.29,
+      // then 45° forward-down to (.44, −.85) and on to (.6, −1.2)); no right angles anywhere on its outline
+      const YS = [0.1, -0.29, -0.85, -1.2];
+      const ox = (y) => (y > -0.45 ? 0.72 + (0.1 / 0.55) * (y - 0.1) : 0.62 + (0.12 / 0.55) * (y + 0.45)); // the outer edge
+      const W = YS.map((y) => new V3(ox(y) + 0.02, y, mask(Math.min(ox(y), 0.74), y) + 0.06));
+      const Wb = [0.0, -0.06, 0.44, 0.6].map((z, i) => new V3(W[i].x - 0.02, YS[i], z));
+      foldedShell(m, [0, 1, 2].map((i) => [W[i], W[i + 1], Wb[i + 1], Wb[i]]), T_FACE, {centre: new V3(0.2, -0.45, 0.6)});
     });
     // the jaw behind the layers: shaded metal where face.png shows the dark recess between strip and cheek, and a
     // closed face so the neck never shows through
@@ -796,8 +803,8 @@ export function buildHead() {
       // standing just outside the half's edge and behind it, so it shows as a glowing seam between mask and cheek.
       // S-04 (Codex side-face sheet): a thin red plate along the side wall's back edge: a short upright prong above
       // the eye line, down the edge, then stepping forward to the chin line; it lies in the wall's plane, just behind it
-      const E = [[0.4, 0.62], [0.1, 0.62], [-0.34, 0.68], [-1.0, 0.9], [-1.2, 1.02]]; // (y, z) along the wall's back edge
-      const wx = (y) => 0.72 + 0.02 - 0.03 + (y < 0.1 ? 0.22 * (y - 0.1) / 1.1 : 0);
+      const E = [[0.1, 0.0], [-0.29, -0.06], [-0.85, 0.44], [-1.2, 0.6]]; // (y, z) along the wall's back edge: the sheet's Z
+      const wx = (y) => (y > -0.45 ? 0.72 + (0.1 / 0.55) * (y - 0.1) : 0.62 + (0.12 / 0.55) * (y + 0.45)) + 0.0;
       const at = ([y, z], dz) => new V3(sx(wx(y)) + s * 0.012, y, z - dz); // dz: across the strip, toward the back
       const sx = (x) => s * x;
       const strip = (w0, w1, mat) => {
@@ -1034,7 +1041,7 @@ export function buildHead() {
       obj.position.y += 0.4 * (1 - p.cheek);
       obj.visible = p.cheek > 0.02;
     });
-    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (-0.06 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.28 * p.cheek, -0.62 * p.cheek))); // back and down, behind the frame line
+    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (-0.04 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.12 * p.cheek, -0.3 * p.cheek))); // a short step back and down, still hugging the jaw under the mask half
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }
 
