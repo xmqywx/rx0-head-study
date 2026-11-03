@@ -228,7 +228,7 @@ export function buildHead() {
   // under the plates' undersides, so the seams read dark; in NT-D the plates lift off and the frame rises into the
   // gaps. Each chain is its own part so the explode can float it between the skull and the armor.
   const frameParts = [];
-  const chain = (path, {w = 0.072, h = 0.13, base = -0.15, seg = 0.42, gap = 0.04} = {}) => {
+  const chain = (path, {w = 0.06, h = 0.035, base = -0.09, seg = 0.24, gap = 0.025} = {}) => {
     // densify the (u, y) polyline, measure it in world space, then cut it into segments
     const pts = [];
     for (let i = 0; i < path.length - 1; i++)
@@ -257,12 +257,14 @@ export function buildHead() {
       const fr = ss.map(at);
       const path3 = fr.map((f) => f.p.clone().addScaledVector(f.n, base));
       const ups = fr.map((f) => f.n);
-      // bevelled bar; every other segment carries a raised knuckle so the chain reads as machined links
-      sweep(m, path3, ups, () => [[-w, 0], [w, 0], [w, h * 0.78], [w * 0.62, h], [-w * 0.62, h], [-w, h * 0.78]]);
-      if (k % 3 === 1 && sl > 0.2) {
-        const c = at(s0 + sl * 0.5);
-        const c2 = at(s0 + sl * 0.5 + 0.07);
-        sweep(m, [c.p.clone().addScaledVector(c.n, base), c2.p.clone().addScaledVector(c2.n, base)], [c.n, c2.n], () => [[-w * 1.45, 0], [w * 1.45, 0], [w * 1.45, h * 1.08], [-w * 1.45, h * 1.08]]);
+      // a flat, chamfered plate segment lying tight under the shell (exploded view: blocky angular units, stepping
+      // sideways from one to the next), every third one with a tab that steps out to the side
+      const o = (k % 2 ? 1 : -1) * w * 0.35;
+      sweep(m, path3, ups, () => [[o - w, 0], [o + w, 0], [o + w * 0.8, h], [o - w * 0.8, h]]);
+      if (k % 3 === 2 && sl > 0.12) {
+        const c = at(s0 + sl * 0.3);
+        const c2 = at(s0 + sl * 0.7);
+        sweep(m, [c.p.clone().addScaledVector(c.n, base), c2.p.clone().addScaledVector(c2.n, base)], [c.n, c2.n], () => [[o + w, 0], [o + w * 2.1, 0], [o + w * 1.9, h], [o + w, h]]);
       }
     }
     const mid = at(L / 2);
@@ -276,19 +278,33 @@ export function buildHead() {
     const i = e === 'l' ? 0 : 1;
     return [[c.ub[i], yb[i]], [c.ut[i], yt[i]]];
   };
-  const addChain = (path, opts, mirror = true) => {
-    const {geo, n, p} = chain(path, opts);
+  // each chain is built twice — seated under the shell, and risen by `rise` along the surface normal at every point —
+  // and the second copy is its morph target, so in NT-D the whole strip lifts evenly into its seam however it curves
+  const addChain = (path, opts, mirror = true, rise = FRAME_RISE) => {
+    const {geo, n} = chain(path, opts);
+    const up = chain(path, {...opts, base: (opts.base ?? -0.09) + rise}).geo;
     for (const s of mirror ? [1, -1] : [1]) {
+      const g0 = s > 0 ? geo : mirrorX(geo);
+      const g1 = s > 0 ? up : mirrorX(up);
+      g0.morphAttributes.position = [g1.attributes.position];
+      g0.morphAttributes.normal = [g1.attributes.normal];
       const g = new THREE.Group();
-      g.add(mesh(s > 0 ? geo : mirrorX(geo), M.red, false));
+      const ms = mesh(g0, M.red, false);
+      g.add(ms);
       const nn = n.clone();
       if (s < 0) nn.x = -nn.x;
-      const part = add(g, nn.clone().multiplyScalar(0.5), (q, obj) => obj.position.addScaledVector(nn, FRAME_RISE * q.frame));
+      const part = add(g, nn.clone().multiplyScalar(0.5), (q) => (ms.morphTargetInfluences[0] = q.frame));
       frameParts.push(part);
     }
   };
-  for (const c of PLATES) for (const e of c.red) addChain(edgePath(c, e), {base: (c.off ?? 0) - 0.21});
-  addChain([[166, 1.42], [194, 1.42]], {base: -0.17}, false);
+  for (const c of PLATES) for (const e of c.red) addChain(edgePath(c, e), {base: (c.off ?? 0) - 0.09}); // top just under the plate's underside
+  addChain([[166, 1.42], [194, 1.42]], {base: -0.06}, false);
+  // the side seam the Destroy sheet shows running from the eye back across the cheek and up toward the crown
+  // seams of the outer layer, traced from the Destroy sheet: in NT-D these rise above the side plates into lines
+  const OUT = {base: 0.0, w: 0.035, seg: 0.3, gap: 0.006}; // near-continuous lines
+  addChain([[46, 0.05], [62, -0.25], [84, -0.05], [104, 0.38], [118, 0.75]], OUT, true, 0.22); // eye → cheek → crown
+  addChain([[156, 1.6], [158, 0.9], [148, 0.5], [138, 0.1], [140, -0.6]], OUT, true, 0.22); // back, beside the rear fin
+  addChain([[25, 1.88], [58, 1.72], [92, 1.66], [124, 1.72], [152, 1.86]], OUT, true, 0.2); // top, along the crown
   // the face: frame either side of the faceplate, under the brow, and up both sides of the crest
   {
     const g = new THREE.Group();
@@ -766,6 +782,22 @@ export function buildHead() {
     // visor band (f3-front at 3x): centre .17 / −.03, it rises to the outer end x .92 at .40 / .28, sitting just above the mask panel's top edge
     const visor = mk((m) => prismDense(m, [[0.006, 0.1], [0.006, -0.16], [0.6, 0.05], [0.82, 0.16], [0.82, 0.37], [0.6, 0.31]], 'z', (x, y) => mask(x, y) - 0.25, (x, y) => mask(x, y) + 0.01, 0.01, {seg: 0.06}));
     const pv = pivot(new V3(s * 0.74, -0.5, 1.0), mesh(shell, M.white)); // hinge on the outer edge
+    // the hinge itself: three knuckles on a vertical axle with bearing rings, between mask and cheek guard
+    {
+      const hg = new THREE.Group();
+      const ax = new THREE.CylinderGeometry(0.022, 0.022, 0.9, 10);
+      hg.add(mesh(ax, M.steel, false));
+      for (const y of [-0.3, 0, 0.3]) {
+        const kn = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.12, 12), M.frameMid, false);
+        kn.position.y = y;
+        const br = mesh(new THREE.TorusGeometry(0.052, 0.012, 6, 16).rotateX(Math.PI / 2), M.steel, false);
+        br.position.y = y + 0.065;
+        hg.add(kn, br);
+      }
+      hg.position.set(s * 0.74, -0.5, 0.97);
+      hg.position.z = 0.86; // behind the closed mask's edge
+      add(hg, new V3(s * 0.6, 0, 0.3), (p, obj) => (obj.visible = p.mask > 0.05));
+    }
     const jawG = new THREE.Group();
     jawG.add(mesh(jaw, M.frame, false));
     add(jawG, new V3(0, -0.2, 0.3), (p, obj) => (obj.visible = p.mask < 0.05)); // only behind the closed mask
@@ -777,7 +809,7 @@ export function buildHead() {
       const k = p.mask;
       // slide out and back, outer edge swinging behind the cheek guard, so only the inner face stays in view
       obj.position.add(new V3(s * MASK.slide * k, -MASK.drop * k, -MASK.back * k));
-      obj.rotation.y = s * MASK.yaw * k;
+      obj.rotation.y = -s * MASK.yaw * k; // inner edge swings back, behind the faceplate's edge
     });
     if (s > 0) anchors.mask = {obj: pv, p: new V3(0.45, -0.55, 1.15)};
   }
