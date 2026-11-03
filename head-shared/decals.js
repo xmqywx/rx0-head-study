@@ -33,7 +33,72 @@ const line = (g, x0, y0, x1, y1, c, wd) => {
 };
 
 // each returns a texture and the aspect (w/h)
+const FLUO = ['#ff6a13', '#c6ff1a', '#22e3ff', '#ff2f6d'];
+
 export const DECALS = {
+  // tiny stencil block: 2–3 lines of very small text with a hairline under it
+  micro: (i = 0) => [canvas(512, 160, (g) => {
+    const T = [['HYD.  PRESS  210', 'CHECK  ·  A-07'], ['NT-D  LOCK', 'MAINT.  ACCESS  4B'], ['PSYCHO-F.  REF  12', 'DO  NOT  PAINT'], ['SENS.  WIRE  /  C3', 'U.C.0096  ANAHEIM']][i % 4];
+    g.fillStyle = INK;
+    g.font = FONT(30, 700);
+    g.fillText(T[0], 6, 44);
+    g.font = FONT(24, 500);
+    g.fillText(T[1], 6, 86);
+    g.fillRect(6, 104, 380, 3);
+    g.fillStyle = i % 2 ? RED : BLUE;
+    g.fillRect(392, 100, 110, 10);
+    g.fillStyle = INK;
+    g.font = FONT(18, 500);
+    g.fillText('00' + (i + 3) + '-' + (17 + i * 9), 6, 140);
+  }), 512 / 160],
+  // a hairline with end ticks and a small label
+  tick: (i = 0) => [canvas(512, 64, (g) => {
+    g.fillStyle = INK;
+    g.fillRect(4, 30, 504, 3);
+    g.fillRect(4, 16, 3, 30);
+    g.fillRect(505, 16, 3, 30);
+    g.fillStyle = [RED, BLUE, INK][i % 3];
+    g.fillRect(150 + (i % 4) * 60, 26, 70, 11);
+    g.fillStyle = INK;
+    g.font = FONT(16, 600);
+    g.fillText(['A', 'B', 'C', 'D'][i % 4] + '-' + (10 + i), 12, 58);
+  }), 8],
+  // an engraved panel line: a dark groove with a light lower lip, sometimes stepped, sometimes ending in a dot
+  scribe: (i = 0) => [canvas(1024, 40, (g) => {
+    const step = i % 3 === 1;
+    const y0 = 4;
+    const groove = (x0, x1, y) => {
+      g.fillStyle = 'rgba(40,44,50,0.9)';
+      g.fillRect(x0, y, x1 - x0, 14);
+      g.fillStyle = 'rgba(255,255,255,0.95)';
+      g.fillRect(x0, y + 14, x1 - x0, 5);
+    };
+    if (step) {
+      groove(0, 480, y0);
+      g.fillStyle = 'rgba(40,44,50,0.85)';
+      g.fillRect(480, y0, 4, 10);
+      groove(480, 1024, y0 + 14);
+    } else groove(0, 1024, y0);
+    if (i % 4 === 2) {
+      g.fillStyle = 'rgba(40,44,50,0.9)';
+      g.beginPath();
+      g.arc(1012, y0 + 2, 6, 0, Math.PI * 2);
+      g.fill();
+    }
+  }), 26],
+  // the luminous strips: tiny solid rectangles in fluorescent ink
+  fluo: (i = 0) => [canvas(128, 32, (g) => {
+    g.fillStyle = FLUO[i % FLUO.length];
+    g.fillRect(2, 4, 124, 24);
+  }), 4],
+  dots: (i = 0) => [canvas(256, 64, (g) => {
+    for (let k = 0; k < 6; k++) {
+      g.fillStyle = k === i % 6 ? RED : INK;
+      g.beginPath();
+      g.arc(20 + k * 42, 32, 9, 0, Math.PI * 2);
+      g.fill();
+    }
+  }), 4],
   unit: () => [canvas(512, 192, (g) => {
     g.fillStyle = INK;
     g.font = FONT(96, 800);
@@ -41,9 +106,9 @@ export const DECALS = {
     g.font = FONT(30, 600);
     g.fillText('UNICORN  /  NT-D', 14, 140);
     g.fillStyle = RED;
-    g.fillRect(14, 156, 300, 8);
+    g.fillRect(14, 156, 300, 4);
     g.fillStyle = BLUE;
-    g.fillRect(322, 156, 120, 8);
+    g.fillRect(322, 156, 120, 4);
   }), 512 / 192],
   caution: () => [canvas(512, 160, (g) => {
     g.fillStyle = RED;
@@ -77,13 +142,13 @@ export const DECALS = {
   }), 1],
   lines: () => [canvas(512, 64, (g) => {
     g.fillStyle = RED;
-    g.fillRect(0, 10, 300, 10);
+    g.fillRect(0, 12, 300, 5);
     g.fillStyle = INK;
-    g.fillRect(310, 10, 60, 10);
+    g.fillRect(310, 12, 60, 5);
     g.fillStyle = BLUE;
-    g.fillRect(0, 34, 200, 6);
+    g.fillRect(0, 34, 200, 3);
     g.fillStyle = INK;
-    g.fillRect(210, 34, 290, 6);
+    g.fillRect(210, 34, 290, 3);
   }), 512 / 64],
   nostep: () => [canvas(384, 128, (g) => {
     g.strokeStyle = INK;
@@ -254,14 +319,17 @@ export function applyDecals(root, targets, spots, centre = new THREE.Vector3(0, 
       }
     }
     helper.rotateZ(s.rot || 0);
-    if (!cache[s.key]) {
-      const [tex, aspect] = DECALS[s.key]();
-      cache[s.key] = {
-        mat: new THREE.MeshStandardMaterial({map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, roughness: 0.55}),
+    const ck = s.key + ':' + (s.v ?? 0);
+    if (!cache[ck]) {
+      const [tex, aspect] = DECALS[s.key](s.v ?? 0);
+      const common = {map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4};
+      cache[ck] = {
+        // fluorescent ink reads as lit: unlit and outside tone mapping, so it stays saturated
+        mat: s.key === 'fluo' ? new THREE.MeshBasicMaterial({...common, toneMapped: false}) : new THREE.MeshStandardMaterial({...common, roughness: 0.55}),
         aspect,
       };
     }
-    const {mat, aspect} = cache[s.key];
+    const {mat, aspect} = cache[ck];
     const size = new THREE.Vector3(s.w, s.w / aspect, s.depth ?? 0.08);
     const geo = new DecalGeometry(hit.object, hit.point, helper.rotation, size);
     if (!geo.attributes.position || geo.attributes.position.count === 0) continue;
@@ -272,5 +340,6 @@ export function applyDecals(root, targets, spots, centre = new THREE.Vector3(0, 
     hit.object.add(d);
     made.push(d);
   }
+  if (typeof window !== 'undefined') window.__decals = {asked: spots.length, made: made.length};
   return made;
 }

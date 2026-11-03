@@ -1492,6 +1492,44 @@ export function buildHead() {
       {key: 'vertical', dir: [0.12, 0.25, -1], w: 0.1, follow: false},
       {key: 'lines', dir: [0, -0.2, 1], from: [0.05, 2.6, 4], w: 0.32, rot: 0},
     ];
+    // the fine detail layer: dozens of tiny stencils, hairlines, dot rows and fluorescent strips over the whole shell
+    // (golden-spiral directions, deterministic), kept off the face opening
+    {
+      const N = 90;
+      const kinds = ['micro', 'tick', 'fluo', 'tick', 'fluo', 'dots', 'micro', 'fluo'];
+      for (let i = 0; i < N; i++) {
+        const t = (i + 0.5) / N;
+        const yN = 1 - 1.75 * t; // from the top down to the jaw line
+        const r = Math.sqrt(Math.max(0, 1 - yN * yN));
+        const ph = i * 2.399963;
+        const d = [Math.sin(ph) * r, yN, Math.cos(ph) * r];
+        if (d[2] > 0.55 && Math.abs(d[0]) < 0.6 && d[1] < 0.45) continue; // the face
+        const key = kinds[i % kinds.length];
+        const w = key === 'fluo' ? 0.05 + 0.03 * ((i * 7) % 3) : key === 'micro' ? 0.17 : key === 'dots' ? 0.1 : 0.22;
+        spots.push({key, v: i, dir: d, w, rot: key === 'fluo' && i % 3 === 0 ? Math.PI / 2 : 0, depth: 0.06});
+      }
+    }
+    // engraved panel lines across the plates (scribed detail), more fluorescent strips
+    for (let i = 0; i < 70; i++) {
+      const t = (i + 0.5) / 70;
+      const yN = 0.95 - 1.7 * t;
+      const r = Math.sqrt(Math.max(0, 1 - yN * yN));
+      const ph = i * 2.399963 + 1.1;
+      const d = [Math.sin(ph) * r, yN, Math.cos(ph) * r];
+      if (d[2] > 0.55 && Math.abs(d[0]) < 0.6 && d[1] < 0.45) continue;
+      spots.push({key: 'scribe', v: i, dir: d, w: 0.28 + 0.22 * ((i * 5) % 4) / 3, rot: i % 2 ? Math.PI / 2 : 0, depth: 0.05});
+    }
+    for (let i = 0; i < 40; i++) {
+      const t = (i + 0.5) / 40;
+      const yN = 0.9 - 1.6 * t;
+      const r = Math.sqrt(Math.max(0, 1 - yN * yN));
+      const ph = i * 2.399963 + 2.3;
+      const d = [Math.sin(ph) * r, yN, Math.cos(ph) * r];
+      if (d[2] > 0.55 && Math.abs(d[0]) < 0.6 && d[1] < 0.45) continue;
+      spots.push({key: 'fluo', v: i, dir: d, w: 0.09 + 0.04 * (i % 3), rot: i % 4 === 0 ? Math.PI / 2 : 0, depth: 0.05});
+    }
+    // the larger marks a little finer
+    for (const sp of spots) if (!['micro', 'tick', 'fluo', 'dots', 'emblem'].includes(sp.key)) sp.w *= 0.82;
     applyDecals(root, targets, spots);
   }
   return {root, update, anchors, anchorWorld, materials: M, surf, hornParts};
