@@ -392,9 +392,10 @@ export function buildHead() {
       let lift = 0;
       S.forEach(([a, b], i) => (lift = Math.max(lift, D[i] - (r.x * a + r.y * b + r.z))));
       const far = (a, b) => r.x * a + r.y * b + r.z + lift + h;
-      const fl = (a, b) => far(a, b) - h + 0.02; // seated on the shell, one armor thickness
-      const geo = geoOf((m) => prism(m, P, 'x', (a, b) => fl(a, b) - T_ARMOR, fl, 0.02));
-      const rg = geoOf((m) => prism(m, P, 'x', (a, b) => fl(a, b) - T_ARMOR - 0.008 - T_RED, (a, b) => fl(a, b) - T_ARMOR - 0.008, 0.006));
+      void far;
+      const fl = (a, b) => shellX(a, b) + 0.065; // conforms to the shell's contour, one armor thickness proud
+      const geo = geoOf((m) => prismDense(m, P, 'x', (a, b) => fl(a, b) - T_ARMOR, fl, 0.02, {seg: 0.08}));
+      const rg = geoOf((m) => prismDense(m, P, 'x', (a, b) => fl(a, b) - T_ARMOR - 0.008 - T_RED, (a, b) => fl(a, b) - T_ARMOR - 0.008, 0.006, {seg: 0.08}));
       redPlates.push(rg, mirrorX(rg));
       const cy = ys.reduce((q, v) => q + v, 0) / ys.length;
       const nn = new V3(1, -r.y * 0.5, -r.x * 0.5).normalize();
@@ -795,6 +796,7 @@ export function buildHead() {
     pv.userData.noRed = true;
     let maskRed = null;
     let maskFront = null;
+    let maskRedX = 0;
     // the frame sheet that rides under this half: same outline, a little larger, just behind it, so the opened
     // half shows a red rim along its edges (Destroy sheet, "opened mask halves")
     {
@@ -822,11 +824,13 @@ export function buildHead() {
         return mesh(m2.geo(), mat, false);
       };
       maskRed = new THREE.Group();
-      maskRed.add(strip(0.0, 0.05, M.red), strip(0.017, 0.033, M.redHot));
+      // an inner red shell: a band lying just inside the wall's plane, from under the wall to past its back edge
+      maskRed.add(strip(-0.12, 0.16, M.red));
+      maskRedX = -s * 0.03;
       // and the L in the fold between the half's inner panel and outer facet, seen from the front
       {
         const F = [[0.72, 0.1], [0.62, -0.45], [0.5, -1.0]]; // the fold between the outer facet and the side wall: the sheet's L
-        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.03);
+        const fa = ([x, y], d) => new V3(s * (x + d), y, FACE_SURF(Math.min(x, 0.74), y) + 0.035);
         const m3 = new Mesher();
         const fl = (w0, w1) => {
           for (let k = 0; k < F.length - 1; k++) {
@@ -838,11 +842,11 @@ export function buildHead() {
             m3.quad(A0, bk(A0), bk(B0), B0, new V3(-s, 0, 0));
           }
         };
-        fl(-0.03, 0.02);
+        fl(-0.1, 0.035);
         maskFront = mesh(m3.geo(), M.red, false);
         pv.children[0].add(maskFront);
       }
-      maskRed.children[1].position.x = s * 0.004;
+
       pv.children[0].add(maskRed);
     }
     // the hinge itself: three knuckles on a vertical axle with bearing rings, between mask and cheek guard
@@ -874,7 +878,7 @@ export function buildHead() {
       obj.position.add(new V3(s * MASK.slide * k, -MASK.drop * k, -MASK.back * k));
       obj.rotation.y = s * MASK.yaw * k; // turned slightly outward, staying in front of the cheek (outer layer)
       obj.rotation.z = -s * MASK.roll * k; // the lower ends swing in to clamp the chin (front sheet)
-      if (maskRed) maskRed.position.x = -s * 0.25 * (1 - k); // the frame plate slides in under the cheek until the half opens
+      if (maskRed) maskRed.position.x = maskRedX - s * 0.25 * (1 - k); // the inner shell slides in until the half opens
       if (maskFront) maskFront.position.z = -0.3 * (1 - k);
     });
     if (s > 0) anchors.mask = {obj: pv, p: new V3(0.45, -0.55, 1.15)};
@@ -1041,7 +1045,7 @@ export function buildHead() {
       obj.position.y += 0.4 * (1 - p.cheek);
       obj.visible = p.cheek > 0.02;
     });
-    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (-0.04 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.12 * p.cheek, -0.3 * p.cheek))); // a short step back and down, still hugging the jaw under the mask half
+    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (0.04 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.1 * p.cheek))); // stays tight against the mask half
     if (s > 0) anchors.cheek = {obj: g, p: new V3(0.95, -0.6, 0.85)};
   }
 
