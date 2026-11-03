@@ -5,6 +5,7 @@
 //   shellPlate  a trapezoid patch of the helmet surface S(u, y), thickened along its normal, chamfered, gapped.
 //   sweep()     a cross-section carried along a path (horn halves, the crown ridge).
 import * as THREE from 'three';
+import {ConvexGeometry} from 'three/addons/geometries/ConvexGeometry.js';
 
 const V3 = THREE.Vector3;
 export const D2R = Math.PI / 180;
@@ -427,4 +428,67 @@ export function surfPolyPlate(surf, polyUY, {t = 0.08, off = 0, gap = 0.024, bev
   }
   const geo = m.geo();
   return {geo, center: at(cen, 0), normal: nrm(cen)};
+}
+
+/**
+ * Read a part off three views: the solid that the front outline (x, y), the side outline (z, y) and optionally the
+ * top outline (x, z) all allow — the intersection of their three extrusions. Outlines must be convex (split a
+ * concave part into convex pieces). Extra cut planes [[nx, ny, nz, d], ...] (keep n·p <= d) chamfer edges. Every face
+ * comes out a flat polygon at whatever angle the views imply: the trapezoids of a kit part, not boxes.
+ */
+export function viewHull(m, {front, side, top, cuts = []}, {mirror = false} = {}) {
+  const planes = [];
+  const add2 = (poly, to3) => {
+    let P = poly.map((p) => [...p]);
+    if (area2(P) < 0) P.reverse();
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i];
+      const b = P[(i + 1) % P.length];
+      const c = P[(i + 2) % P.length];
+      if ((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) < -1e-9) console.warn('viewHull: concave outline at', b, poly);
+      const n2 = [b[1] - a[1], -(b[0] - a[0])];
+      const n = to3(n2[0], n2[1]);
+      const p = to3(a[0], a[1], true);
+      const L = n.length();
+      if (L < 1e-9) continue;
+      n.multiplyScalar(1 / L);
+      planes.push([n, n.dot(p)]);
+    }
+  };
+  // 2D (a, b) → 3D direction / point; the missing axis is 0
+  if (front) add2(front, (a, b) => new V3(a, b, 0));
+  if (side) add2(side, (a, b) => new V3(0, b, a));
+  if (top) add2(top, (a, b) => new V3(a, 0, b));
+  for (const [nx, ny, nz, d] of cuts) {
+    const n = new V3(nx, ny, nz);
+    const L = n.length();
+    planes.push([n.multiplyScalar(1 / L), d / L]);
+  }
+  const pts = [];
+  const M3 = new THREE.Matrix3();
+  for (let i = 0; i < planes.length; i++)
+    for (let j = i + 1; j < planes.length; j++)
+      for (let k = j + 1; k < planes.length; k++) {
+        const [a, da] = planes[i];
+        const [b, db] = planes[j];
+        const [c, dc] = planes[k];
+        M3.set(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+        if (Math.abs(M3.determinant()) < 1e-7) continue;
+        const p = new V3(da, db, dc).applyMatrix3(M3.clone().invert());
+        if (planes.every(([n, d]) => n.dot(p) <= d + 1e-5) && !pts.some((q) => q.distanceToSquared(p) < 1e-8)) pts.push(p);
+      }
+  if (pts.length < 4) return m;
+  const hull = new ConvexGeometry(pts);
+  const P = hull.attributes.position.array;
+  const cen = pts.reduce((a, p) => a.add(p), new V3()).multiplyScalar(1 / pts.length);
+  for (const mx of mirror ? [false, true] : [false]) {
+    const c = cen.clone();
+    if (mx) c.x = -c.x;
+    for (let i = 0; i < P.length; i += 9) {
+      const v = [0, 3, 6].map((o) => new V3(P[i + o], P[i + o + 1], P[i + o + 2]));
+      if (mx) for (const w of v) w.x = -w.x;
+      m.tri(v[0], v[1], v[2], v[0].clone().add(v[1]).add(v[2]).multiplyScalar(1 / 3).sub(c)); // outward
+    }
+  }
+  return m;
 }

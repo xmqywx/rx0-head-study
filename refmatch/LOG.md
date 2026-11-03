@@ -37,3 +37,4 @@ Note: IoU went down from .911 on purpose in u4 — the side sheet's pod height a
 | m2 | — | .895 / .758 | cheek guard traced: main plate under the pod + front piece folding in to the jaw point |
 
 Lesson: three automatic panel-transfer attempts failed (stamp grid, planar fit per panel, surface-normal plates). Hand-tracing a part from the sheet works (horn .944 alone, pod, side plates).
+| v1–v4 | — | .895 / .767 | NEW METHOD viewHull: each part = intersection of its front, side and top outlines (convex pieces) → trapezoid faces at the angles the views imply. Rebuilt with it: mask (3 facets/half + chin, side profile measured: z 1.34 → 1.16 → chin 1.32), slim cheek slab, pod body (slanted front/back corners), visor (thin V), brow-prow underside down to the visor |
