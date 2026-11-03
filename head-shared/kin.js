@@ -57,7 +57,8 @@ export function readouts(d) {
   return {
     hornAngle: p.hornAngle,
     finSpan: 2 * tipX * UNIT_M,
-    maskGap: 2 * MASK.slide * p.mask * UNIT_M * 1000,
+    // the halves turn round the head's axis (MASK.orbit); their inner edges sit ~1.2 out from it
+    maskGap: 2 * 1.2 * Math.sin(MASK.orbit * p.mask) * UNIT_M * 1000,
     crownLift: CROWN.lift * p.crown * UNIT_M * 1000,
     frame: p.frame * 100,
     eyes: p.eyes * 100,

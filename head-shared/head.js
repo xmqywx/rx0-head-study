@@ -612,15 +612,29 @@ export function buildHead() {
     const camUnit = new THREE.Group();
     {
       const cz = fl(0.78) + 0.04;
-      camUnit.add(mesh(geoOf((m) => viewHull(m, {front: [[-0.14, 0.64], [0.14, 0.64], [0.17, 0.68], [0.17, 0.9], [0.14, 0.94], [-0.14, 0.94], [-0.17, 0.9], [-0.17, 0.68]], side: [[cz - 0.18, 0.64], [cz + 0.02, 0.64], [cz + 0.05, 0.68], [cz + 0.05, 0.9], [cz + 0.02, 0.94], [cz - 0.18, 0.94]]})), M.grey, false));
-      camUnit.add(mesh(geoOf((m) => prism(m, [[-0.11, 0.67], [0.11, 0.67], [0.11, 0.91], [-0.11, 0.91]], 'z', cz, cz + 0.056, 0.004)), M.lens, false));
-      const cam = mesh(geoOf((m) => prism(m, [[-0.075, 0.7], [0.075, 0.7], [0.075, 0.88], [-0.075, 0.88]], 'z', cz, cz + 0.064, 0.006)), M.green, false);
-      camUnit.add(cam);
-      // red frame either side of the housing
-      const camRed = mesh(geoOf((m) => prism(m, [[0.18, 0.62], [0.24, 0.66], [0.24, 0.98], [0.18, 0.94]], 'z', cz - 0.12, cz + 0.02, 0.008, {mirror: true})), M.red, false);
-      camUnit.add(camRed);
-      camUnit.userData.red = camRed;
-      anchors.camera = {obj: cam, p: new V3(0, 0.79, cz + 0.06)};
+      // a funnel bezel: four trapezoid faces sloping in to a recessed window (Destroy sheet), the whole unit
+      // tilted back so it sits inset at an angle; no red side blocks
+      const cy = 0.79;
+      const Ro = [0.16, 0.15]; // outer half width / half height
+      const Ri = [0.095, 0.085]; // inner (window) half width / half height
+      const zo = cz + 0.05;
+      const zi = cz - 0.03;
+      const O = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ro[0] * (b > 0 ? 0.88 : 1), cy + b * Ro[1], zo));
+      const I = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => P3(a * Ri[0], cy + b * Ri[1], zi));
+      const bez = [0, 1, 2, 3].map((k) => [O[k], O[(k + 1) % 4], I[(k + 1) % 4], I[k]]);
+      const tilt = new THREE.Group();
+      tilt.add(mesh(geoOf((m) => foldedShell(m, bez, 0.04, {centre: new V3(0, cy, zi - 0.3)})), M.grey, false));
+      tilt.add(mesh(geoOf((m) => prism(m, [[-Ri[0], cy - Ri[1]], [Ri[0], cy - Ri[1]], [Ri[0], cy + Ri[1]], [-Ri[0], cy + Ri[1]]], 'z', zi - 0.04, zi + 0.002, 0.004)), M.lens, false));
+      const cam = mesh(geoOf((m) => prism(m, [[-0.07, cy - 0.065], [0.07, cy - 0.065], [0.07, cy + 0.065], [-0.07, cy + 0.065]], 'z', zi - 0.04, zi + 0.012, 0.006)), M.green, false);
+      tilt.add(cam);
+      // tilt back about the window's centre
+      const pivotC = new V3(0, cy, zi);
+      tilt.position.copy(pivotC);
+      tilt.children.forEach((c) => c.position.sub(pivotC));
+      tilt.rotation.x = -0.32;
+      camUnit.add(tilt);
+      camUnit.userData.red = new THREE.Object3D();
+      anchors.camera = {obj: cam, p: new V3(0, cy, zi + 0.02)};
       camUnit.userData.noRed = true;
       add(camUnit, new V3(0, 0.6, 0.6), (p, obj) => {
         const t = p.crown;
