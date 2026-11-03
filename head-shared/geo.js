@@ -656,12 +656,14 @@ export function foldedShell(m, facets, t = 0.07, {centre, lip = t >= 0.05 ? 0.06
       }
       // the return: a strip of the same thickness bent back along −n from this edge
       w.normalize();
-      const a2 = a.clone().addScaledVector(n, -lip);
-      const b2 = b.clone().addScaledVector(n, -lip);
+      // the return bends back and out at 135° to the face (no right angles on the part)
+      const dir = n.clone().negate().add(w.clone().multiplyScalar(1.0)).normalize();
+      const a2 = a.clone().addScaledVector(dir, lip);
+      const b2 = b.clone().addScaledVector(dir, lip);
       const ai = a.clone().addScaledVector(w, -t);
       const bi = b.clone().addScaledVector(w, -t);
-      const ai2 = ai.clone().addScaledVector(n, -lip);
-      const bi2 = bi.clone().addScaledVector(n, -lip);
+      const ai2 = ai.clone().addScaledVector(dir, lip);
+      const bi2 = bi.clone().addScaledVector(dir, lip);
       m.quad(a, b, b2, a2, w); // outside of the return
       m.quad(ai, ai2, bi2, bi, w.clone().negate()); // inside of the return
       m.quad(a2, b2, bi2, ai2, n.clone().negate()); // its folded-back edge

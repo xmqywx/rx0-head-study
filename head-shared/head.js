@@ -751,14 +751,14 @@ export function buildHead() {
       // it a long side facet from the visor's end (x .72) down to a point beside the chin (.28, −1.42)
       foldedShell(m, [U([[0.006, -0.16], [0.6, 0.05], [0.47, -0.6], [0.19, -1.0], [0.006, -1.0]], 0.03)], T_FACE, {centre: new V3(0.3, -0.4, 0)});
       foldedShell(m, [U([[0.006, -1.02], [0.18, -1.02], [0.13, -1.22], [0.006, -1.22]], 0.03)], T_FACE, {centre: new V3(0.1, -1.0, 0)});
-      foldedShell(m, [U([[0.61, 0.05], [0.72, 0.1], [0.57, -0.65], [0.28, -1.42], [0.14, -1.24], [0.2, -1.02], [0.48, -0.62]], 0.06)], T_FACE, {centre: new V3(0.35, -0.6, 0)});
+      foldedShell(m, [U([[0.61, 0.05], [0.72, 0.1], [0.57, -0.65], [0.28, -1.42], [0.14, -1.24], [0.2, -1.02], [0.48, -0.62]], 0.03)], T_FACE, {centre: new V3(0.35, -0.6, 0)});
       // S-03 side wall: from the facet's outer edge (x .72 → .5) straight back to the red frame line (sheet: the
       // wall's back edge runs z .62 at the top, .68 at y −.34, .9 at y −1.0, in the half's closed position)
       // the wall reaches back to mid-head (Destroy side view: its back edge — the red Z — runs z 0 from y .1 to −.29,
       // then 45° forward-down to (.44, −.85) and on to (.6, −1.2)); no right angles anywhere on its outline
       const YS = [0.1, -0.29, -0.85, -1.2];
       const ox = (y) => (y > -0.45 ? 0.72 + (0.1 / 0.55) * (y - 0.1) : 0.62 + (0.12 / 0.55) * (y + 0.45)); // the outer edge
-      const W = YS.map((y) => new V3(ox(y) + 0.02, y, mask(Math.min(ox(y), 0.74), y) + 0.06));
+      const W = YS.map((y) => new V3(ox(y) + 0.02, y, mask(Math.min(ox(y), 0.74), y) + 0.03));
       const Wb = [0.0, -0.06, 0.44, 0.6].map((z, i) => new V3(W[i].x - 0.02, YS[i], z));
       foldedShell(m, [0, 1, 2].map((i) => [W[i], W[i + 1], Wb[i + 1], Wb[i]]), T_FACE, {centre: new V3(0.2, -0.45, 0.6)});
     });
@@ -899,19 +899,22 @@ export function buildHead() {
     for (let i = 0; i < 2; i++) {
       const [y0, w0, z0] = ROWS[i];
       const [y1, w1, z1] = ROWS[i + 1];
-      facets.push([P(-w0, y0, z0), P(w0, y0, z0), P(w1, y1, z1), P(-w1, y1, z1)]);
+      const R = 0.08; // the ridge stands this far in front of the edges
+      const C0 = P(0, y0, z0 + R);
+      const C1 = P(0, y1, z1 + R);
       for (const sx of [1, -1]) {
         const A = P(sx * w0, y0, z0);
         const B = P(sx * w1, y1, z1);
-        const d = P(sx * 0.1, 0, -0.18);
-        facets.push([A, B, B.clone().add(d), A.clone().add(d)]);
+        facets.push([C0, A, B], [C0, B, C1]);
+        const d = P(sx * 0.12, 0, -0.14); // side bevel turning back at ~135°
+        facets.push([A, B, B.clone().add(d)], [A, B.clone().add(d), A.clone().add(d)]);
       }
     }
     g.add(mesh(geoOf((m) => foldedShell(m, facets, 0.06, {centre: new V3(0, -0.5, 0.6)})), M.white));
-    const faceZ = (y) => 1.12 + (0.03 / 0.35) * (y + 0.05);
+    const faceZ = (y) => 1.12 + 0.08 + (0.03 / 0.35) * (y + 0.05); // on the ridge
     // mouth vents: three chevrons on the upper front facet
     for (const y of [-0.2, -0.31, -0.42])
-      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) + 0.008, 0.006, {mirror: true})), M.lens, false));
+      g.add(mesh(geoOf((m) => prism(m, [[0, y + 0.02], [0.17, y + 0.06], [0.17, y + 0.025], [0, y - 0.015]], 'z', 1.1, (x, yy) => faceZ(yy) - 0.18 * Math.abs(x) + 0.01, 0.006, {mirror: true})), M.lens, false));
     const chin = mesh(
       geoOf((m) =>
         viewHull(m, {
@@ -1000,6 +1003,7 @@ export function buildHead() {
     anchors.rails = {obj: g, p: new V3(0.45, -0.58, 0.75)};
   }
 
+  let cheekOld = null;
   // ---------------------------------------------------------------- cheek guards
   for (const s of [1, -1]) {
     // a tall plate standing just outside the mask (front view: x .68–.93, its front face a narrow strip; side view:
@@ -1037,6 +1041,7 @@ export function buildHead() {
     const g = new THREE.Group();
     g.userData.noRed = true;
     g.add(mesh(s > 0 ? geo : mirrorX(geo), M.white, 40));
+    cheekOld = g;
     // the lower tab only appears in NT-D: it slides down out of the cheek guard (Destroy sheet side view)
     const tabG = new THREE.Group();
     tabG.userData.noRed = true;
@@ -1045,7 +1050,10 @@ export function buildHead() {
       obj.position.y += 0.4 * (1 - p.cheek);
       obj.visible = p.cheek > 0.02;
     });
-    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => obj.position.add(new V3(s * (-0.08 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.32 * p.cheek))); // steps back under the layers
+    add(g, new V3(s * 1.0, -0.35, 0.3), (p, obj) => {
+      obj.position.add(new V3(s * (-0.2 * p.cheek + CROWN.spread * 0.9 * p.crown), -0.04 * p.cheek, -0.32 * p.cheek)); // retracts inside, the NT-D cheek plate takes its place
+      obj.visible = p.cheek < 0.98;
+    });
     // NT-D cheek: two more curved layers outside the opened mask half (Destroy front sheet: mask half, then two
     // staggered cheek plates, each bent round the face and tapering in toward the jaw). Each is a uniform folded
     // sheet, three columns across so it curves; they slide out from inside the head as NT-D runs.
@@ -1065,7 +1073,8 @@ export function buildHead() {
       // layer 2 starts just outside the red L on the mask half (sheet: mask half's visible strip ±.45–.75)
       const L2 = band([[0.2, 0.9, 1.08], [-0.3, 0.92, 1.1], [-0.75, 0.8, 1.0], [-1.05, 0.62, 0.78]], 0.02);
       const L3 = band([[0.28, 1.06, 1.26], [-0.3, 1.08, 1.28], [-0.82, 0.98, 1.16], [-1.12, 0.76, 0.9]], 0.05);
-      for (const [F, k] of [[L2, 0], [L3, 1]]) {
+      void L3;
+      for (const [F, k] of [[L2, 0]]) {
         const geoL = geoOf((m) => foldedShell(m, F, 0.05, {centre: new V3(0.4, -0.4, 0.2)}));
         const lg = new THREE.Group();
         lg.add(mesh(s > 0 ? geoL : mirrorX(geoL), M.white, 40));
