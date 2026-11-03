@@ -307,9 +307,14 @@ export function buildHead() {
 
   // ---------------------------------------------------------------- helmet plates
   const plateParts = [];
+  const redPlates = []; // thin frame plates, one under each armor plate (built here, posed at the end)
+  const T_ARMOR = 0.06;
+  const T_RED = 0.022;
   const mkPlate = (c, side, extra = {}) => {
     const mirror = side < 0;
-    const {geo, center, normal} = shellPlate(surf, c, {t: c.t ?? 0.09, off: (c.off ?? 0) - 0.04, gap: 0.028, bevel: 0.035, mirror});
+    const {geo, center, normal} = shellPlate(surf, c, {t: T_ARMOR, off: Math.min(c.off ?? 0, 0.02) - 0.02, gap: 0.028, bevel: 0.02, mirror});
+    // its frame plate: the same outline, thin, lying just under it
+    redPlates.push(shellPlate(surf, c, {t: T_RED, off: Math.min(c.off ?? 0, 0.02) - 0.02 - T_RED - 0.008, gap: 0.0, bevel: 0.006, mirror}).geo);
     const o = mesh(geo, M.white);
     const g = new THREE.Group();
     g.add(o);
@@ -384,7 +389,10 @@ export function buildHead() {
       let lift = 0;
       S.forEach(([a, b], i) => (lift = Math.max(lift, D[i] - (r.x * a + r.y * b + r.z))));
       const far = (a, b) => r.x * a + r.y * b + r.z + lift + h;
-      const geo = geoOf((m) => prism(m, P, 'x', (a, b) => far(a, b) - h - 0.12, far, 0.035));
+      const fl = (a, b) => far(a, b) - h + 0.02; // seated on the shell, one armor thickness
+      const geo = geoOf((m) => prism(m, P, 'x', (a, b) => fl(a, b) - T_ARMOR, fl, 0.02));
+      const rg = geoOf((m) => prism(m, P, 'x', (a, b) => fl(a, b) - T_ARMOR - 0.008 - T_RED, (a, b) => fl(a, b) - T_ARMOR - 0.008, 0.006));
+      redPlates.push(rg, mirrorX(rg));
       const cy = ys.reduce((q, v) => q + v, 0) / ys.length;
       const nn = new V3(1, -r.y * 0.5, -r.x * 0.5).normalize();
       for (const s of [1, -1]) {
@@ -1201,26 +1209,18 @@ export function buildHead() {
       for (let q = o; q && q !== root; q = q.parent) if (q.userData.noRed) return true;
       return false;
     };
+    void skip;
     const C = new V3(0, 0.3, -0.2);
-    const list = [];
-    root.traverse((o) => {
-      if (!o.isMesh || o.material !== M.white || skip(o)) return;
-      let g = o.geometry.clone().applyMatrix4(o.matrixWorld);
-      g = g.index ? g.toNonIndexed() : g;
+    const list = redPlates.map((g0) => {
+      let g = g0.index ? g0.toNonIndexed() : g0.clone();
       for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
-      g.morphAttributes = {};
       g.computeBoundingBox();
       const c = g.boundingBox.getCenter(new V3());
       const out = c.clone().sub(C).normalize();
-      g.translate(-c.x, -c.y, -c.z);
-      g.translate(c.x, c.y, c.z);
-      // two poses of the same piece: retracted deep inside (Unicorn Mode) and pushed out under its plate (NT-D)
+      // retracted inside (Unicorn Mode) → in place under its plate (NT-D): a straight push, no shape change
       const lo = g.clone();
-      lo.translate(-out.x * 0.65, -out.y * 0.65, -out.z * 0.65);
-      g.translate(-c.x, -c.y, -c.z);
-      g.scale(0.98, 0.98, 0.98);
-      g.translate(c.x - out.x * 0.09, c.y - out.y * 0.09, c.z - out.z * 0.09);
-      list.push([lo, g]);
+      lo.translate(-out.x * 0.5, -out.y * 0.5, -out.z * 0.5);
+      return [lo, g];
     });
     const base = mergeGeometries(list.map((q) => q[0]));
     const raised = mergeGeometries(list.map((q) => q[1]));
