@@ -439,7 +439,14 @@ export function buildHead() {
     v.position.set(0, 0.012, -0.005);
     g.add(v);
     // NT-D: the crown slides forward over the risen camera (Destroy sheet: the helmet crown block above the camera)
-    add(g, new V3(0, 1.3, 0), (p, obj) => obj.position.add(new V3(0, (CROWN.rise + 0.05) * p.crown - 0.08 * p.crown, 0.42 * p.crown)));
+    // the crown's front block: hangs down from the cap's front, hidden inside the head in Unicorn Mode; in NT-D the
+    // crown slides forward and a little down and this block lands right on the camera housing, so camera and crown
+    // read as one unit (Destroy sheet front view)
+    g.add(mesh(geoOf((m) => viewHull(m, {
+      front: [[-0.16, 1.31], [0.16, 1.31], [0.21, 1.38], [0.22, 1.72], [0.15, 1.84], [-0.15, 1.84], [-0.22, 1.72], [-0.21, 1.38]],
+      side: [[0.5, 1.31], [0.84, 1.31], [0.86, 1.4], [0.78, 1.84], [0.5, 1.84]],
+    })), M.white));
+    add(g, new V3(0, 1.3, 0), (p, obj) => obj.position.add(new V3(0, -0.12 * p.crown, 0.42 * p.crown)));
     anchors.crown = {obj: g, p: new V3(0.35, 1.95, -0.3)};
   }
 
@@ -567,7 +574,7 @@ export function buildHead() {
       camUnit.userData.noRed = true;
       add(camUnit, new V3(0, 0.6, 0.6), (p, obj) => {
         const t = p.crown;
-        obj.position.add(new V3(0, 0.52 * t, 0.12 * Math.min(1, t * 2)));
+        obj.position.add(new V3(0, 0.25 * t, 0.06 * Math.min(1, t * 2))); // only a short rise
         obj.userData.red.position.z = -0.2 * (1 - t); // the frame either side slides out behind it
       });
     }

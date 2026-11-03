@@ -30,7 +30,7 @@ export const stage = (d, k) => ease((d - STAGES[k][0]) / (STAGES[k][1] - STAGES[
 export const raw = (d, k) => clamp01((d - STAGES[k][0]) / (STAGES[k][1] - STAGES[k][0]));
 
 // mechanism constants (units)
-export const HORN = {root: [0, 1.45, 0.75], tip: [0, 4.57, 1.5], split: 63, spread: 0.3, drop: 0.08, sink: 0.25, pitch: 0} // Destroy sheet: fins rooted at the forehead column top, tips at x ±2.6, y 2.5;
+export const HORN = {root: [0, 1.45, 0.75], tip: [0, 4.57, 1.5], split: 63, spread: 0.3, drop: 0.32, sink: 0.25, pitch: 0} // Destroy sheet: fins rooted at the forehead column top, tips at x ±2.6, y 2.5;
 HORN.len = Math.hypot(HORN.tip[1] - HORN.root[1], HORN.tip[2] - HORN.root[2]);
 HORN.partScale = HORN.len / 3.2; // reference/parts/horn.png draws a 3.2-unit blade at 200 px per unit
 export const MASK = {orbit: 23 * (Math.PI / 180), drop: 0.03}; // NT-D: halves slide out, step back, roll their lower ends in to clamp the mouth, outer edge turned in to follow the head's contour
